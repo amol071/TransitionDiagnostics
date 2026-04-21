@@ -62,3 +62,34 @@ export function findSibling(allCaps, refCap, targetLevel) {
             c.competency_order === refCap.competency_order
     );
 }
+
+/**
+ * 7 CORE leadership GCFs used in the Employee self-reflection
+ * (pillar_order.gcf_order).
+ *   Leading Self (1): Hunger to Learn and Improve (2), Emotional and Social Awareness (3)
+ *   Leading Others (2): Leading Team (1), Developing Others (2), Influencing (3), Fostering Collaboration (4)
+ *   Leading Business (3): Acting Strategically (2)
+ */
+export const CORE_GCF_KEYS = new Set([
+    "1.2", "1.3",
+    "2.1", "2.2", "2.3", "2.4",
+    "3.2",
+]);
+
+/** The remaining 5 GCFs (for the optional reflections section). */
+export const OTHER_GCFS = [
+    { key: "1.1", pillar: "Leading Self", gcf: "Initiative" },
+    { key: "3.1", pillar: "Leading Business", gcf: "Customer Centricity" },
+    { key: "3.3", pillar: "Leading Business", gcf: "Functional Capability" },
+    { key: "3.4", pillar: "Leading Business", gcf: "Delivering Results" },
+    { key: "3.5", pillar: "Leading Business", gcf: "Institution Building" },
+];
+
+export function isCoreCapability(cap) {
+    return CORE_GCF_KEYS.has(`${cap.pillar_order}.${cap.gcf_order}`);
+}
+
+/** Filter caps to CORE-only (7 GCFs) for the self-reflection form. */
+export function coreCaps(caps) {
+    return caps.filter(isCoreCapability);
+}

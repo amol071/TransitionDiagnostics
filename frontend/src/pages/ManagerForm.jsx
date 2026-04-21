@@ -8,6 +8,7 @@ import { nextLevelFor, capsAtLevel, groupByPillarGcf } from "@/lib/gcf";
 import { Plus, Trash, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Combobox } from "@/components/Combobox";
+import ClearFormButton from "@/components/ClearFormButton";
 
 const LEVELS = ["", "Below", "Meets", "Exceeds"];
 const READINESS = [
@@ -84,6 +85,26 @@ export default function ManagerForm() {
         if (!window.confirm("Submit manager review? You won't be able to edit after submission unless reopened.")) return;
         await save("submitted");
         toast.success("Manager review submitted");
+    };
+
+    const clearForm = async () => {
+        const emptyCaps = levelCaps.map((cap) => ({
+            capability_id: cap.id, current_level: "", current_rationale: "", demonstrated_next: false, rationale: "",
+        }));
+        const next = {
+            ...form,
+            capability_responses: emptyCaps,
+            stakeholders: [
+                { name: "", email: "", relationship: "" },
+                { name: "", email: "", relationship: "" },
+                { name: "", email: "", relationship: "" },
+            ],
+            overall_rationale: "",
+            readiness: "",
+        };
+        setForm(next);
+        try { await api.put(`/cases/${caseId}/manager-form`, { ...next, status: "draft" }); toast.success("Form cleared"); }
+        catch { toast.error("Could not save cleared form"); }
     };
 
     return (
@@ -246,6 +267,7 @@ export default function ManagerForm() {
                 <div className="flex gap-2">
                     {!readonly && (
                         <>
+                            <ClearFormButton onClear={clearForm} testid="mgr-clear-btn" />
                             <button onClick={() => save()} data-testid="mgr-save-draft" className="px-3 py-1.5 text-sm border border-slate-300 rounded hover:bg-slate-50">Save draft</button>
                             <button onClick={submit} data-testid="mgr-submit" className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-1"><CheckCircle size={14} weight="fill" /> Submit</button>
                         </>

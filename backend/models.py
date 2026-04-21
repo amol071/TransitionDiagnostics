@@ -179,12 +179,19 @@ class CapabilityResponse(BaseModel):
     rationale: str = ""
 
 
+class OtherGcfComment(BaseModel):
+    gcf_key: str = ""  # e.g. "leading-business.initiative" — unique key
+    gcf_label: str = ""  # human label for display
+    comment: str = ""
+
+
 class EmployeeForm(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=_uuid)
     case_id: str
     contributions: List[Contribution] = Field(default_factory=list)
     capability_responses: List[CapabilityResponse] = Field(default_factory=list)
+    other_gcf_comments: List[OtherGcfComment] = Field(default_factory=list)
     overall_reflection: str = ""
     status: Literal["draft", "submitted"] = "draft"
     submitted_at: Optional[str] = None

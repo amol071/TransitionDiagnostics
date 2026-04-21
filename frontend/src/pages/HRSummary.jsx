@@ -7,6 +7,7 @@ import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator, AI_LABELS } from 
 import { humanDate } from "@/lib/utils-ldc";
 import { CheckCircle, Sparkle, Plus, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import ClearFormButton from "@/components/ClearFormButton";
 
 const READINESS = [{ v: "", l: "Select…" }, { v: "strong", l: "Strong" }, { v: "moderate", l: "Moderate" }, { v: "weak", l: "Weak" }];
 
@@ -77,6 +78,21 @@ export default function HRSummary() {
         if (!window.confirm("Submit final HR summary? The case will be closed.")) return;
         await save("submitted");
         toast.success("HR summary finalized");
+    };
+
+    const clearForm = async () => {
+        const next = {
+            ...form,
+            strengths: [""],
+            improvements: [""],
+            overall_summary: "",
+            additional_feedback: "",
+            development_plan: "",
+            readiness: "",
+        };
+        setForm(next);
+        try { await api.put(`/cases/${caseId}/hr-review`, { ...next, status: "draft", strengths: [], improvements: [] }); toast.success("Form cleared"); }
+        catch { toast.error("Could not save cleared form"); }
     };
 
     return (
@@ -187,6 +203,7 @@ export default function HRSummary() {
                 <div className="flex gap-2">
                     {!readonly && (
                         <>
+                            <ClearFormButton onClear={clearForm} testid="hr-clear-btn" />
                             <button onClick={() => save()} data-testid="hr-save" className="px-3 py-1.5 text-sm border border-slate-300 rounded">Save draft</button>
                             <button onClick={submit} data-testid="hr-submit" className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-1"><CheckCircle size={14} weight="fill" />Finalize</button>
                         </>

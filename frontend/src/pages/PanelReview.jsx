@@ -9,6 +9,7 @@ import { humanDate, DOC_TYPE_LABELS } from "@/lib/utils-ldc";
 import { nextLevelFor, capsAtLevel, groupByPillarGcf } from "@/lib/gcf";
 import { CheckCircle, FolderOpen, Sparkle } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import ClearFormButton from "@/components/ClearFormButton";
 
 const PANEL_LEVELS = [
     { v: "", l: "—" },
@@ -82,6 +83,14 @@ export default function PanelReview() {
         if (!window.confirm("Submit your panel review?")) return;
         await save("submitted");
         toast.success("Panel review submitted");
+    };
+
+    const clearForm = async () => {
+        const emptyRatings = levelCaps.map((cap) => ({ capability_id: cap.id, rating: "", rationale: "" }));
+        const next = { ...form, capability_ratings: emptyRatings, overall_rating: "", overall_rationale: "", discussion_notes: "" };
+        setForm(next);
+        try { await api.put(`/cases/${caseId}/panel-review/mine`, { ...next, status: "draft" }); toast.success("Form cleared"); }
+        catch { toast.error("Could not save cleared form"); }
     };
 
     const applyPanelDraft = () => {
@@ -269,6 +278,7 @@ export default function PanelReview() {
                 <div className="flex gap-2">
                     {!readonly && (
                         <>
+                            <ClearFormButton onClear={clearForm} testid="panel-clear-btn" />
                             <button onClick={() => save()} data-testid="panel-save" className="px-3 py-1.5 text-sm border border-slate-300 rounded">Save draft</button>
                             <button onClick={submit} data-testid="panel-submit" className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-1"><CheckCircle size={14} weight="fill" />Submit</button>
                         </>

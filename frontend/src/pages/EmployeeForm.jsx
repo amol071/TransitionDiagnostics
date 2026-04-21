@@ -5,9 +5,10 @@ import { useAuth } from "@/lib/auth";
 import StatusBadge from "@/components/StatusBadge";
 import AIPanel from "@/components/AIPanel";
 import { AIWriteButton, useAutoSave, SaveIndicator } from "@/components/AIHelpers";
-import { nextLevelFor, currentLevelNumber, capsAtLevel, groupByPillarGcf, findSibling } from "@/lib/gcf";
+import { nextLevelFor, currentLevelNumber, capsAtLevel, groupByPillarGcf, findSibling, coreCaps, OTHER_GCFS } from "@/lib/gcf";
 import { Plus, Trash, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import ClearFormButton from "@/components/ClearFormButton";
 
 const LEVELS = ["", "Below", "Meets", "Exceeds"];
 
@@ -26,7 +27,7 @@ export default function EmployeeForm() {
         ]).then(([cd, capd, fd]) => {
             setC(cd); setAllCaps(capd);
             const nl = nextLevelFor(cd.employee?.level);
-            const levelCaps = capsAtLevel(capd, nl);
+            const levelCaps = coreCaps(capsAtLevel(capd, nl));
             const existing = new Map((fd.capability_responses || []).map(r => [r.capability_id, r]));
             fd.capability_responses = levelCaps.map(cap => existing.get(cap.id) || {
                 capability_id: cap.id, current_level: "", current_rationale: "", demonstrated_next: false, rationale: ""
@@ -34,13 +35,16 @@ export default function EmployeeForm() {
             if (!fd.contributions || fd.contributions.length === 0) {
                 fd.contributions = [{ area: "", role: "", impact: "", stakeholders: "" }];
             }
+            if (!Array.isArray(fd.other_gcf_comments)) {
+                fd.other_gcf_comments = [];
+            }
             setForm(fd);
         });
     }, [caseId]);
 
     const nextLvl = c ? nextLevelFor(c.employee?.level) : 3;
     const currLvl = c ? currentLevelNumber(c.employee?.level) : 2;
-    const levelCaps = useMemo(() => capsAtLevel(allCaps, nextLvl), [allCaps, nextLvl]);
+    const levelCaps = useMemo(() => coreCaps(capsAtLevel(allCaps, nextLvl)), [allCaps, nextLvl]);
     const grouped = useMemo(() => groupByPillarGcf(levelCaps), [levelCaps]);
 
     const save = async (overrideStatus) => {
@@ -53,6 +57,7 @@ export default function EmployeeForm() {
                 capability_id: cap.id, current_level: "", current_rationale: "", demonstrated_next: false, rationale: ""
             }),
             contributions: data.contributions || [],
+            other_gcf_comments: Array.isArray(data.other_gcf_comments) ? data.other_gcf_comments : [],
         });
         return data;
     };
@@ -68,9 +73,48 @@ export default function EmployeeForm() {
     const delContrib = (i) => { const arr = form.contributions.filter((_,j)=>j!==i); setForm({ ...form, contributions: arr }); mark(); };
     const setCap = (i, k, v) => { const arr = [...form.capability_responses]; arr[i] = { ...arr[i], [k]: v }; setForm({ ...form, capability_responses: arr }); mark(); };
 
+    // Optional comments on the 5 non-core GCFs (min 2, max 3 if any selected)
+    const otherComments = form.other_gcf_comments || [];
+    const otherByKey = new Map(otherComments.map((o) => [o.gcf_key, o]));
+    const toggleOtherGcf = (g, on) => {
+        let arr;
+        if (on) {
+            if (otherComments.length >= 3) { toast.error("You can select at most 3 additional GCFs"); return; }
+            arr = [...otherComments, { gcf_key: g.key, gcf_label: g.gcf, comment: "" }];
+        } else {
+            arr = otherComments.filter((o) => o.gcf_key !== g.key);
+        }
+        setForm({ ...form, other_gcf_comments: arr }); mark();
+    };
+    const setOtherComment = (key, v) => {
+        const arr = otherComments.map((o) => o.gcf_key === key ? { ...o, comment: v } : o);
+        setForm({ ...form, other_gcf_comments: arr }); mark();
+    };
+
+    const clearForm = async () => {
+        const emptyCaps = levelCaps.map((cap) => ({
+            capability_id: cap.id, current_level: "", current_rationale: "", demonstrated_next: false, rationale: "",
+        }));
+        const next = {
+            ...form,
+            contributions: [{ area: "", role: "", impact: "", stakeholders: "" }],
+            capability_responses: emptyCaps,
+            other_gcf_comments: [],
+            overall_reflection: "",
+        };
+        setForm(next);
+        try { await api.put(`/cases/${caseId}/employee-form`, { ...next, status: "draft" }); toast.success("Form cleared"); }
+        catch { toast.error("Could not save cleared form"); }
+    };
+
     const submit = async () => {
         const missing = form.capability_responses.some(r => r.demonstrated_next && !r.rationale?.trim());
         if (missing) { toast.error("Provide a rationale for each capability marked as demonstrated at next level."); return; }
+        const count = otherComments.length;
+        if (count === 1) { toast.error("Optional reflections: please select at least 2 GCFs (or none)."); return; }
+        if (count > 3) { toast.error("Optional reflections: maximum 3 GCFs allowed."); return; }
+        const emptyOther = otherComments.find((o) => !o.comment?.trim());
+        if (emptyOther) { toast.error(`Please add a comment for "${emptyOther.gcf_label}" or deselect it.`); return; }
         if (!window.confirm("Submit employee self-reflection? You won't be able to edit after submission unless reopened.")) return;
         await save("submitted");
         toast.success("Employee self-reflection submitted");
@@ -104,7 +148,7 @@ export default function EmployeeForm() {
                 </div>
             </Section>
 
-            <Section title={`Next-level capability reflection (L${nextLvl})`} subtitle={`You are at L${currLvl} and being evaluated against the Godrej Capability Framework at L${nextLvl}. Reflect on where you have already demonstrated each expectation.`}>
+            <Section title={`Core leadership capabilities (L${nextLvl})`} subtitle={`The LDC assessment focuses on 7 core GCFs. You are at L${currLvl} and being evaluated against the Godrej Capability Framework at L${nextLvl}. Reflect on where you have already demonstrated each expectation.`}>
                 <div className="space-y-6">
                     {grouped.map((p) => (
                         <div key={p.pillar_order} className="space-y-2" data-testid={`pillar-${p.pillar_order}`}>
@@ -156,11 +200,59 @@ export default function EmployeeForm() {
                 />
             </Section>
 
+            <Section
+                title="Optional · Reflections on other GCFs"
+                subtitle="(Optional) The LDC assessment will focus on the 7 core leadership capabilities listed above. You can also share your overall reflections on the 5 GCFs not listed (i.e. Initiative, Customer Centricity, Functional Capability, Delivering Results, Institution Building): select 2 to 3 GCFs to comment on."
+            >
+                <div className="space-y-3" data-testid="other-gcf-section">
+                    <div className="text-[11px] text-slate-500">
+                        Selected <strong>{otherComments.length}</strong> / 3 · min 2 when opting in
+                    </div>
+                    <div className="space-y-2">
+                        {OTHER_GCFS.map((g) => {
+                            const existing = otherByKey.get(g.key);
+                            const checked = !!existing;
+                            const disableCheckbox = readonly || (!checked && otherComments.length >= 3);
+                            return (
+                                <div key={g.key} className="border border-slate-200 rounded p-3 bg-white" data-testid={`other-gcf-${g.key}`}>
+                                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={(e) => toggleOtherGcf(g, e.target.checked)}
+                                            disabled={disableCheckbox}
+                                            data-testid={`other-gcf-toggle-${g.key}`}
+                                        />
+                                        <span className="font-medium text-slate-900">{g.gcf}</span>
+                                        <span className="text-[11px] text-slate-500">· {g.pillar}</span>
+                                    </label>
+                                    {checked && (
+                                        <div className="mt-2">
+                                            <TextArea
+                                                label="Your reflection"
+                                                value={existing.comment}
+                                                onChange={(v) => setOtherComment(g.key, v)}
+                                                readonly={readonly}
+                                                ai={!readonly}
+                                                aiContext={`Employee optional reflection on ${g.gcf}`}
+                                                tid={`other-gcf-comment-${g.key}`}
+                                                rows={3}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </Section>
+
             <div className="flex items-center justify-between flex-wrap gap-3 pt-2">
                 <SaveIndicator saving={saving} savedAt={savedAt} dirty={dirty} />
                 <div className="flex items-center gap-2">
                     {!readonly && (
                         <>
+                            <ClearFormButton onClear={clearForm} testid="emp-clear-btn" />
                             <button onClick={() => save()} data-testid="save-draft" className="px-3 py-1.5 text-sm border border-slate-300 rounded hover:bg-slate-50">Save draft</button>
                             <button onClick={submit} data-testid="submit-form" className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-1">
                                 <CheckCircle size={14} weight="fill" /> Submit

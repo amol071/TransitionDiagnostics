@@ -6,6 +6,7 @@ import { AIWriteButton, useAutoSave, SaveIndicator } from "@/components/AIHelper
 import { nextLevelFor, capsAtLevel, groupByPillarGcf } from "@/lib/gcf";
 import { CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import ClearFormButton from "@/components/ClearFormButton";
 
 const LEVELS = ["", "Below", "Meets", "Exceeds"];
 
@@ -60,6 +61,16 @@ export default function StakeholderForm() {
         if (!window.confirm("Submit stakeholder feedback? You cannot edit after submission.")) return;
         await save("submitted");
         toast.success("Feedback submitted");
+    };
+
+    const clearForm = async () => {
+        const emptyCaps = levelCaps.map((cap) => ({
+            capability_id: cap.id, current_level: "", demonstrated_next: false, rationale: "",
+        }));
+        const next = { ...form, capability_responses: emptyCaps, comments: "" };
+        setForm(next);
+        try { await api.put(`/cases/${caseId}/stakeholder-feedback/mine`, { ...next, status: "draft" }); toast.success("Form cleared"); }
+        catch { toast.error("Could not save cleared form"); }
     };
 
     return (
@@ -131,6 +142,7 @@ export default function StakeholderForm() {
                 <div className="flex gap-2">
                     {!readonly && (
                         <>
+                            <ClearFormButton onClear={clearForm} testid="stk-clear-btn" />
                             <button onClick={() => save()} data-testid="stk-save" className="px-3 py-1.5 text-sm border border-slate-300 rounded">Save draft</button>
                             <button onClick={submit} data-testid="stk-submit" className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-1"><CheckCircle size={14} weight="fill" />Submit</button>
                         </>
