@@ -67,20 +67,23 @@ export default function AdminCenter() {
                     </div>
 
                     <div className="ldc-panel">
-                        <div className="p-4 border-b border-slate-200 ldc-section-title">Capability framework ({caps.length})</div>
-                        <table className="ldc-table w-full">
-                            <thead><tr><th>Code</th><th>Name</th><th>Pillar</th><th>Category</th></tr></thead>
-                            <tbody>
-                                {caps.map(c => (
-                                    <tr key={c.id}>
-                                        <td className="font-mono text-xs">{c.code}</td>
-                                        <td>{c.name}</td>
-                                        <td>{c.pillar}</td>
-                                        <td><span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${c.category === "differentiating" ? "bg-amber-50 border border-amber-200 text-amber-800" : "bg-slate-100 border border-slate-200"}`}>{c.category}</span></td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                        <div className="p-4 border-b border-slate-200 ldc-section-title">Godrej Capability Framework ({caps.length} competencies across L1–L4)</div>
+                        <div className="max-h-96 overflow-auto">
+                            <table className="ldc-table w-full">
+                                <thead className="sticky top-0 bg-white"><tr><th>Code</th><th>Level</th><th>Pillar</th><th>GCF</th><th>Competency</th></tr></thead>
+                                <tbody>
+                                    {caps.map(c => (
+                                        <tr key={c.id}>
+                                            <td className="font-mono text-[11px] whitespace-nowrap">{c.code}</td>
+                                            <td><span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 border border-slate-200">L{c.level}</span></td>
+                                            <td className="text-xs">{c.pillar}</td>
+                                            <td className="text-xs">{c.gcf}</td>
+                                            <td className="text-xs">{c.name}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 

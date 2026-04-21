@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import StatusBadge from "@/components/StatusBadge";
 import AIPanel from "@/components/AIPanel";
 import { AIWriteButton, useAutoSave, SaveIndicator } from "@/components/AIHelpers";
+import { nextLevelFor, currentLevelNumber, capsAtLevel, groupByPillarGcf, findSibling } from "@/lib/gcf";
 import { Plus, Trash, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -14,7 +15,7 @@ export default function EmployeeForm() {
     const { caseId } = useParams();
     const { user } = useAuth();
     const [c, setC] = useState(null);
-    const [caps, setCaps] = useState([]);
+    const [allCaps, setAllCaps] = useState([]);
     const [form, setForm] = useState(null);
 
     useEffect(() => {
@@ -23,10 +24,11 @@ export default function EmployeeForm() {
             api.get(`/capabilities`).then(r => r.data),
             api.get(`/cases/${caseId}/employee-form`).then(r => r.data),
         ]).then(([cd, capd, fd]) => {
-            setC(cd); setCaps(capd);
-            // ensure capability_responses populated
+            setC(cd); setAllCaps(capd);
+            const nl = nextLevelFor(cd.employee?.level);
+            const levelCaps = capsAtLevel(capd, nl);
             const existing = new Map((fd.capability_responses || []).map(r => [r.capability_id, r]));
-            fd.capability_responses = capd.map(cap => existing.get(cap.id) || {
+            fd.capability_responses = levelCaps.map(cap => existing.get(cap.id) || {
                 capability_id: cap.id, current_level: "", current_rationale: "", demonstrated_next: false, rationale: ""
             });
             if (!fd.contributions || fd.contributions.length === 0) {
@@ -36,14 +38,19 @@ export default function EmployeeForm() {
         });
     }, [caseId]);
 
+    const nextLvl = c ? nextLevelFor(c.employee?.level) : 3;
+    const currLvl = c ? currentLevelNumber(c.employee?.level) : 2;
+    const levelCaps = useMemo(() => capsAtLevel(allCaps, nextLvl), [allCaps, nextLvl]);
+    const grouped = useMemo(() => groupByPillarGcf(levelCaps), [levelCaps]);
+
     const save = async (overrideStatus) => {
         const payload = { ...form, status: overrideStatus || form.status || "draft" };
         const { data } = await api.put(`/cases/${caseId}/employee-form`, payload);
+        const existing = new Map((data.capability_responses || []).map(r => [r.capability_id, r]));
         setForm({
             ...data,
-            capability_responses: caps.map(cap => {
-                const ex = (data.capability_responses || []).find(r => r.capability_id === cap.id);
-                return ex || { capability_id: cap.id, current_level: "", current_rationale: "", demonstrated_next: false, rationale: "" };
+            capability_responses: levelCaps.map(cap => existing.get(cap.id) || {
+                capability_id: cap.id, current_level: "", current_rationale: "", demonstrated_next: false, rationale: ""
             }),
             contributions: data.contributions || [],
         });
@@ -97,22 +104,42 @@ export default function EmployeeForm() {
                 </div>
             </Section>
 
-            <Section title="Next-level capability reflection" subtitle="For each capability, reflect on your current level and whether you've demonstrated the next-level expectation">
-                <div className="space-y-3">
-                    {form.capability_responses.map((r, i) => {
-                        const cap = caps.find(c => c.id === r.capability_id);
-                        if (!cap) return null;
-                        return (
-                            <CapabilityRow
-                                key={cap.id}
-                                cap={cap}
-                                r={r}
-                                onChange={(k, v) => setCap(i, k, v)}
-                                readonly={readonly}
-                                idx={i}
-                            />
-                        );
-                    })}
+            <Section title={`Next-level capability reflection (L${nextLvl})`} subtitle={`You are at L${currLvl} and being evaluated against the Godrej Capability Framework at L${nextLvl}. Reflect on where you have already demonstrated each expectation.`}>
+                <div className="space-y-6">
+                    {grouped.map((p) => (
+                        <div key={p.pillar_order} className="space-y-2" data-testid={`pillar-${p.pillar_order}`}>
+                            <div className="flex items-baseline gap-2 pt-2">
+                                <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Pillar {p.pillar_order}</div>
+                                <h3 className="text-lg font-semibold text-slate-900">{p.pillar}</h3>
+                            </div>
+                            {p.gcfs.map((g) => (
+                                <div key={g.gcf_order} className="space-y-2" data-testid={`gcf-${p.pillar_order}-${g.gcf_order}`}>
+                                    <div className="flex items-baseline gap-2 pl-1 border-l-2 border-slate-300 pt-1">
+                                        <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 ml-2">{p.pillar_order}.{g.gcf_order}</div>
+                                        <h4 className="text-sm font-semibold text-slate-700">{g.gcf}</h4>
+                                    </div>
+                                    {g.caps.map((cap) => {
+                                        const idx = form.capability_responses.findIndex(r => r.capability_id === cap.id);
+                                        const r = idx >= 0 ? form.capability_responses[idx] : null;
+                                        if (!r) return null;
+                                        const sibling = findSibling(allCaps, cap, currLvl);
+                                        return (
+                                            <CapabilityRow
+                                                key={cap.id}
+                                                cap={cap}
+                                                sibling={sibling}
+                                                currLvl={currLvl}
+                                                nextLvl={nextLvl}
+                                                r={r}
+                                                onChange={(k, v) => setCap(idx, k, v)}
+                                                readonly={readonly}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            ))}
+                        </div>
+                    ))}
                 </div>
             </Section>
 
@@ -208,18 +235,18 @@ function TextArea({ label, value, onChange, readonly, rows = 3, ai, aiContext, t
     );
 }
 
-function CapabilityRow({ cap, r, onChange, readonly, idx }) {
+function CapabilityRow({ cap, sibling, currLvl, nextLvl, r, onChange, readonly }) {
     const [expanded, setExpanded] = useState(false);
     return (
-        <div className={`border rounded ${cap.category === "differentiating" ? "border-amber-200 bg-amber-50/30" : "border-slate-200"}`} data-testid={`cap-${cap.code}`}>
+        <div className="border rounded border-slate-200 bg-white ml-4" data-testid={`cap-${cap.code}`}>
             <div className="p-3 flex items-start justify-between cursor-pointer" onClick={() => setExpanded(!expanded)}>
-                <div>
-                    <div className="text-sm font-semibold">{cap.name}</div>
-                    <div className="text-xs text-slate-500">{cap.pillar} · {cap.category === "differentiating" ? "Differentiating" : "Necessary"} · {cap.code}</div>
+                <div className="min-w-0 flex-1 pr-2">
+                    <div className="text-sm font-medium text-slate-900">{cap.name}</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5 font-mono">{cap.code}</div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                     {r.demonstrated_next && (
-                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Next-level demonstrated</span>
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">L{nextLvl} demonstrated</span>
                     )}
                     <span className="text-xs text-slate-400">{expanded ? "−" : "+"}</span>
                 </div>
@@ -228,12 +255,12 @@ function CapabilityRow({ cap, r, onChange, readonly, idx }) {
                 <div className="p-3 pt-0 space-y-2 border-t border-slate-100">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                         <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                            <div className="font-semibold text-slate-600 mb-0.5">Current level expectation</div>
-                            <div className="text-slate-700">{cap.current_level_desc}</div>
+                            <div className="font-semibold text-slate-600 mb-0.5">L{currLvl} expectation (current)</div>
+                            <div className="text-slate-700">{sibling ? sibling.name : <span className="text-slate-400 italic">No equivalent at L{currLvl}</span>}</div>
                         </div>
-                        <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                            <div className="font-semibold text-slate-600 mb-0.5">Next level expectation</div>
-                            <div className="text-slate-700">{cap.next_level_desc}</div>
+                        <div className="p-2 bg-amber-50 rounded border border-amber-200">
+                            <div className="font-semibold text-amber-800 mb-0.5">L{nextLvl} expectation (target)</div>
+                            <div className="text-slate-800">{cap.name}</div>
                         </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -268,7 +295,7 @@ function CapabilityRow({ cap, r, onChange, readonly, idx }) {
                             disabled={readonly}
                             data-testid={`cap-next-${cap.code}`}
                         />
-                        I have demonstrated the <strong>next-level</strong> expectation for this capability
+                        I have demonstrated the <strong>L{nextLvl}</strong> expectation for this capability
                     </label>
                     {r.demonstrated_next && (
                         <TextArea
@@ -277,7 +304,7 @@ function CapabilityRow({ cap, r, onChange, readonly, idx }) {
                             onChange={(v) => onChange("rationale", v)}
                             readonly={readonly}
                             ai={!readonly}
-                            aiContext={`Rationale for next-level demonstration of ${cap.name}`}
+                            aiContext={`Rationale for L${nextLvl} demonstration of ${cap.name}`}
                             tid={`cap-rationale-${cap.code}`}
                         />
                     )}

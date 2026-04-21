@@ -2,6 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 from core import db, hash_password
+from gcf_framework import all_capabilities
 
 
 async def seed_all():
@@ -92,39 +93,26 @@ async def seed_all():
         await db.employees.insert_one(d)
         emp_docs[e["emp_id"]] = d
 
-    # ---- Capabilities (GCF Level 3) ----
-    caps = [
-        ("STR-1", "Strategic Thinking", "Strategic", "necessary",
-         "Solves defined problems; executes within clear scope",
-         "Shapes multi-year direction; connects ambiguous signals across the business"),
-        ("BUS-1", "Business Acumen", "Business Acumen", "necessary",
-         "Understands own function's P&L drivers",
-         "Translates enterprise economics into trade-offs across BUs"),
-        ("EXE-1", "Drive Execution", "Execution", "necessary",
-         "Delivers agreed outcomes on time",
-         "Orchestrates dependent teams to deliver under pressure and ambiguity"),
-        ("PPL-1", "Develops Others", "People", "necessary",
-         "Coaches direct reports on current role",
-         "Grows next-generation leaders and builds talent pipeline"),
-        ("STR-2", "Inspires Vision", "Strategic", "differentiating",
-         "Articulates team goals",
-         "Crafts compelling narrative that mobilises the enterprise"),
-        ("PPL-2", "Builds Organisational Talent", "People", "differentiating",
-         "Supports hiring in own team",
-         "Shapes org design and succession across multiple functions"),
-        ("EXE-2", "Delivers Complex Outcomes", "Execution", "differentiating",
-         "Manages multi-workstream projects",
-         "Navigates cross-enterprise complexity and regulatory scrutiny"),
-        ("BUS-2", "Customer-First Mindset", "Business Acumen", "differentiating",
-         "Responds to customer feedback",
-         "Anticipates unmet customer needs and reframes the portfolio"),
-    ]
-    cap_docs = {}
-    for i, (code, name, pillar, cat, cur, nxt) in enumerate(caps):
-        d = {"id": str(uuid.uuid4()), "code": code, "name": name, "pillar": pillar,
-             "category": cat, "current_level_desc": cur, "next_level_desc": nxt, "order": i}
+    # ---- Capabilities — Godrej Capability Framework (all 4 levels) ----
+    cap_docs = {}  # key: (level, pillar, gcf, competency_order) -> doc
+    for (level, pillar, p_order, gcf, g_order, c_order, name, code, order) in all_capabilities():
+        d = {
+            "id": str(uuid.uuid4()),
+            "code": code,
+            "name": name,
+            "pillar": pillar,
+            "pillar_order": p_order,
+            "gcf": gcf,
+            "gcf_order": g_order,
+            "competency_order": c_order,
+            "level": level,
+            "order": order,
+        }
         await db.capabilities.insert_one(d)
-        cap_docs[code] = d
+        cap_docs[(level, pillar, gcf, c_order)] = d
+
+    def cap(level, pillar, gcf, c_order):
+        return cap_docs[(level, pillar, gcf, c_order)]
 
     # ---- Cases ----
     fy = "FY26"
@@ -182,18 +170,18 @@ async def seed_all():
              "stakeholders": "HRBP, EM cohort"},
         ],
         "capability_responses": [
-            {"capability_id": cap_docs["STR-1"]["id"], "current_level": "Meets",
+            {"capability_id": cap(3, "Leading Business", "Acting Strategically", 1)["id"], "current_level": "Meets",
              "current_rationale": "Shaped multi-quarter payments roadmap.",
              "demonstrated_next": True,
              "rationale": "Drove 2-year platform thesis shared with BU heads."},
-            {"capability_id": cap_docs["BUS-1"]["id"], "current_level": "Meets",
+            {"capability_id": cap(3, "Leading Business", "Customer Centricity", 1)["id"], "current_level": "Meets",
              "current_rationale": "Owns cost model for payments.",
              "demonstrated_next": False, "rationale": ""},
-            {"capability_id": cap_docs["EXE-1"]["id"], "current_level": "Exceeds",
+            {"capability_id": cap(3, "Leading Business", "Delivering Results", 1)["id"], "current_level": "Exceeds",
              "current_rationale": "Delivered 3 complex programs on time.",
              "demonstrated_next": True,
              "rationale": "Cross-BU migration executed despite ambiguous scope."},
-            {"capability_id": cap_docs["PPL-1"]["id"], "current_level": "Meets",
+            {"capability_id": cap(3, "Leading Others", "Developing Others", 1)["id"], "current_level": "Meets",
              "current_rationale": "Coaches 4 ICs monthly.",
              "demonstrated_next": False,
              "rationale": "Still building structured development for senior engineers."},
@@ -207,18 +195,18 @@ async def seed_all():
     alice_mgr_form = {
         "id": str(uuid.uuid4()), "case_id": case_alice["id"],
         "capability_responses": [
-            {"capability_id": cap_docs["STR-1"]["id"], "current_level": "Meets",
+            {"capability_id": cap(3, "Leading Business", "Acting Strategically", 1)["id"], "current_level": "Meets",
              "current_rationale": "Proven strategic thinker in payments domain.",
              "demonstrated_next": True,
              "rationale": "Her platform thesis shaped BU planning in Q3."},
-            {"capability_id": cap_docs["BUS-1"]["id"], "current_level": "Meets",
+            {"capability_id": cap(3, "Leading Business", "Customer Centricity", 1)["id"], "current_level": "Meets",
              "current_rationale": "Strong grasp of payment unit economics.",
              "demonstrated_next": True,
              "rationale": "Reframed infra spend in CFO review."},
-            {"capability_id": cap_docs["EXE-1"]["id"], "current_level": "Exceeds",
+            {"capability_id": cap(3, "Leading Business", "Delivering Results", 1)["id"], "current_level": "Exceeds",
              "current_rationale": "Consistently delivers under pressure.",
              "demonstrated_next": True, "rationale": "Migration was flawless."},
-            {"capability_id": cap_docs["PPL-1"]["id"], "current_level": "Meets",
+            {"capability_id": cap(3, "Leading Others", "Developing Others", 1)["id"], "current_level": "Meets",
              "current_rationale": "Coaches direct reports.",
              "demonstrated_next": False,
              "rationale": "Limited evidence of growing senior leaders yet."},
@@ -239,9 +227,9 @@ async def seed_all():
         "id": str(uuid.uuid4()), "case_id": case_alice["id"],
         "stakeholder_name": "Sam Reddy", "stakeholder_email": "stake.one@ldc.io",
         "capability_responses": [
-            {"capability_id": cap_docs["STR-1"]["id"], "current_level": "Meets",
+            {"capability_id": cap(3, "Leading Business", "Acting Strategically", 1)["id"], "current_level": "Meets",
              "demonstrated_next": True, "rationale": "Brings enterprise view to planning."},
-            {"capability_id": cap_docs["PPL-1"]["id"], "current_level": "Below",
+            {"capability_id": cap(3, "Leading Others", "Developing Others", 1)["id"], "current_level": "Below",
              "demonstrated_next": False, "rationale": "Could invest more in mentoring beyond immediate team."},
         ],
         "comments": "Strong operator. Occasionally terse in cross-functional debates.",
@@ -258,10 +246,10 @@ async def seed_all():
              "stakeholders": "CMO, BU GM, Agency partners"},
         ],
         "capability_responses": [
-            {"capability_id": cap_docs["STR-1"]["id"], "current_level": "Meets",
+            {"capability_id": cap(3, "Leading Business", "Acting Strategically", 1)["id"], "current_level": "Meets",
              "demonstrated_next": True,
              "rationale": "Drove three-year brand positioning since last LDC."},
-            {"capability_id": cap_docs["BUS-2"]["id"], "current_level": "Exceeds",
+            {"capability_id": cap(3, "Leading Business", "Institution Building", 1)["id"], "current_level": "Exceeds",
              "demonstrated_next": True,
              "rationale": "Customer research re-shaped portfolio roadmap."},
         ],
@@ -289,9 +277,9 @@ async def seed_all():
     await db.manager_forms.insert_one({
         "id": str(uuid.uuid4()), "case_id": case_bob_prior["id"],
         "capability_responses": [
-            {"capability_id": cap_docs["STR-1"]["id"], "current_level": "Meets",
+            {"capability_id": cap(3, "Leading Business", "Acting Strategically", 1)["id"], "current_level": "Meets",
              "demonstrated_next": False, "rationale": "Brand operator — limited cross-BU framing."},
-            {"capability_id": cap_docs["BUS-2"]["id"], "current_level": "Meets",
+            {"capability_id": cap(3, "Leading Business", "Institution Building", 1)["id"], "current_level": "Meets",
              "demonstrated_next": True, "rationale": "Customer intimacy demonstrated."},
         ],
         "stakeholders": [],
@@ -304,8 +292,8 @@ async def seed_all():
         await db.panel_reviews.insert_one({
             "id": str(uuid.uuid4()), "case_id": case_bob_prior["id"], "panel_member_id": pm,
             "capability_ratings": [
-                {"capability_id": cap_docs["STR-1"]["id"], "rating": "Moderate", "rationale": "Needs stronger multi-year framing"},
-                {"capability_id": cap_docs["BUS-2"]["id"], "rating": "Strong", "rationale": "Customer-first is a clear strength"},
+                {"capability_id": cap(3, "Leading Business", "Acting Strategically", 1)["id"], "rating": "Moderate", "rationale": "Needs stronger multi-year framing"},
+                {"capability_id": cap(3, "Leading Business", "Institution Building", 1)["id"], "rating": "Strong", "rationale": "Customer-first is a clear strength"},
             ],
             "overall_rating": "weak",
             "overall_rationale": "Not yet ready. Strategic breadth and cross-BU influence are development areas. Retest in 12 months with evidence of platform-level thinking.",

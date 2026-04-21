@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import StatusBadge from "@/components/StatusBadge";
 import AIPanel from "@/components/AIPanel";
 import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator } from "@/components/AIHelpers";
+import { nextLevelFor, capsAtLevel, groupByPillarGcf } from "@/lib/gcf";
 import { Plus, Trash, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -18,7 +19,7 @@ const READINESS = [
 export default function ManagerForm() {
     const { caseId } = useParams();
     const [c, setC] = useState(null);
-    const [caps, setCaps] = useState([]);
+    const [allCaps, setAllCaps] = useState([]);
     const [form, setForm] = useState(null);
     const [aiSuggestions, setAiSuggestions] = useState(null);
 
@@ -28,9 +29,11 @@ export default function ManagerForm() {
             api.get(`/capabilities`).then(r => r.data),
             api.get(`/cases/${caseId}/manager-form`).then(r => r.data),
         ]).then(([cd, capd, fd]) => {
-            setC(cd); setCaps(capd);
+            setC(cd); setAllCaps(capd);
+            const nl = nextLevelFor(cd.employee?.level);
+            const lc = capsAtLevel(capd, nl);
             const existing = new Map((fd.capability_responses || []).map(r => [r.capability_id, r]));
-            fd.capability_responses = capd.map(cap => existing.get(cap.id) || {
+            fd.capability_responses = lc.map(cap => existing.get(cap.id) || {
                 capability_id: cap.id, current_level: "", current_rationale: "", demonstrated_next: false, rationale: ""
             });
             if (!fd.stakeholders || fd.stakeholders.length < 3) {
@@ -42,14 +45,18 @@ export default function ManagerForm() {
         });
     }, [caseId]);
 
+    const nextLvl = c ? nextLevelFor(c.employee?.level) : 3;
+    const levelCaps = useMemo(() => capsAtLevel(allCaps, nextLvl), [allCaps, nextLvl]);
+    const grouped = useMemo(() => groupByPillarGcf(levelCaps), [levelCaps]);
+
     const save = async (overrideStatus) => {
         const payload = { ...form, status: overrideStatus || form.status || "draft" };
         const { data } = await api.put(`/cases/${caseId}/manager-form`, payload);
+        const existing = new Map((data.capability_responses || []).map(r => [r.capability_id, r]));
         setForm({
             ...data,
-            capability_responses: caps.map(cap => {
-                const ex = (data.capability_responses || []).find(r => r.capability_id === cap.id);
-                return ex || { capability_id: cap.id, current_level: "", current_rationale: "", demonstrated_next: false, rationale: "" };
+            capability_responses: levelCaps.map(cap => existing.get(cap.id) || {
+                capability_id: cap.id, current_level: "", current_rationale: "", demonstrated_next: false, rationale: ""
             }),
             stakeholders: data.stakeholders || [],
         });
@@ -104,43 +111,60 @@ export default function ManagerForm() {
             </div>
 
             <div className="ldc-panel">
-                <div className="p-4 border-b border-slate-200"><div className="ldc-section-title">Next-level capability review</div></div>
-                <div className="p-4 space-y-3">
-                    {form.capability_responses.map((r, i) => {
-                        const cap = caps.find(c => c.id === r.capability_id);
-                        if (!cap) return null;
-                        return (
-                            <div key={cap.id} className={`border rounded ${cap.category === "differentiating" ? "border-amber-200 bg-amber-50/30" : "border-slate-200"}`} data-testid={`mgr-cap-${cap.code}`}>
-                                <div className="p-3">
-                                    <div className="flex items-start justify-between mb-2">
-                                        <div>
-                                            <div className="text-sm font-semibold">{cap.name}</div>
-                                            <div className="text-xs text-slate-500">{cap.pillar} · {cap.category === "differentiating" ? "Differentiating" : "Necessary"}</div>
-                                        </div>
-                                        <label className="flex items-center gap-2 text-xs">
-                                            <input type="checkbox" checked={!!r.demonstrated_next} onChange={(e) => setCap(i, "demonstrated_next", e.target.checked)} disabled={readonly} />
-                                            Demonstrated at next level
-                                        </label>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                        <label>
-                                            <div className="ldc-label mb-1">Current rating</div>
-                                            <select value={r.current_level || ""} onChange={(e) => setCap(i, "current_level", e.target.value)} disabled={readonly} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm disabled:bg-slate-50">
-                                                {LEVELS.map(l => <option key={l} value={l}>{l || "Select"}</option>)}
-                                            </select>
-                                        </label>
-                                        <label className="col-span-2">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="ldc-label">Rationale / evidence</div>
-                                                {!readonly && <AIWriteButton text={r.rationale} onResult={(v) => setCap(i, "rationale", v)} context={`Manager rationale for ${cap.name}`} />}
-                                            </div>
-                                            <textarea rows={2} value={r.rationale || ""} onChange={(e) => setCap(i, "rationale", e.target.value)} disabled={readonly} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm disabled:bg-slate-50" />
-                                        </label>
-                                    </div>
-                                </div>
+                <div className="p-4 border-b border-slate-200"><div className="ldc-section-title">L{nextLvl} capability review ({levelCaps.length} competencies · Godrej Capability Framework)</div></div>
+                <div className="p-4 space-y-5">
+                    {grouped.map((p) => (
+                        <div key={p.pillar_order} className="space-y-2" data-testid={`mgr-pillar-${p.pillar_order}`}>
+                            <div className="flex items-baseline gap-2">
+                                <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Pillar {p.pillar_order}</div>
+                                <h3 className="text-lg font-semibold text-slate-900">{p.pillar}</h3>
                             </div>
-                        );
-                    })}
+                            {p.gcfs.map((g) => (
+                                <div key={g.gcf_order} className="space-y-2">
+                                    <div className="flex items-baseline gap-2 pl-1 border-l-2 border-slate-300">
+                                        <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 ml-2">{p.pillar_order}.{g.gcf_order}</div>
+                                        <h4 className="text-sm font-semibold text-slate-700">{g.gcf}</h4>
+                                    </div>
+                                    {g.caps.map((cap) => {
+                                        const i = form.capability_responses.findIndex(x => x.capability_id === cap.id);
+                                        const r = i >= 0 ? form.capability_responses[i] : null;
+                                        if (!r) return null;
+                                        return (
+                                            <div key={cap.id} className="border rounded border-slate-200 bg-white ml-4" data-testid={`mgr-cap-${cap.code}`}>
+                                                <div className="p-3">
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <div className="flex-1 pr-2">
+                                                            <div className="text-sm font-medium">{cap.name}</div>
+                                                            <div className="text-[11px] text-slate-500 font-mono mt-0.5">{cap.code}</div>
+                                                        </div>
+                                                        <label className="flex items-center gap-2 text-xs">
+                                                            <input type="checkbox" checked={!!r.demonstrated_next} onChange={(e) => setCap(i, "demonstrated_next", e.target.checked)} disabled={readonly} />
+                                                            L{nextLvl} demonstrated
+                                                        </label>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                                        <label>
+                                                            <div className="ldc-label mb-1">Current rating</div>
+                                                            <select value={r.current_level || ""} onChange={(e) => setCap(i, "current_level", e.target.value)} disabled={readonly} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm disabled:bg-slate-50">
+                                                                {LEVELS.map(l => <option key={l} value={l}>{l || "Select"}</option>)}
+                                                            </select>
+                                                        </label>
+                                                        <label className="col-span-2">
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <div className="ldc-label">Rationale / evidence</div>
+                                                                {!readonly && <AIWriteButton text={r.rationale} onResult={(v) => setCap(i, "rationale", v)} context={`Manager rationale for ${cap.name}`} />}
+                                                            </div>
+                                                            <textarea rows={2} value={r.rationale || ""} onChange={(e) => setCap(i, "rationale", e.target.value)} disabled={readonly} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm disabled:bg-slate-50" />
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ))}
+                        </div>
+                    ))}
                 </div>
             </div>
 

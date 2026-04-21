@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -6,6 +6,7 @@ import StatusBadge from "@/components/StatusBadge";
 import AIPanel from "@/components/AIPanel";
 import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator, AI_LABELS } from "@/components/AIHelpers";
 import { humanDate, DOC_TYPE_LABELS } from "@/lib/utils-ldc";
+import { nextLevelFor, capsAtLevel, groupByPillarGcf } from "@/lib/gcf";
 import { CheckCircle, FolderOpen, Sparkle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -25,7 +26,7 @@ export default function PanelReview() {
     const { caseId } = useParams();
     const { user } = useAuth();
     const [c, setC] = useState(null);
-    const [caps, setCaps] = useState([]);
+    const [allCaps, setAllCaps] = useState([]);
     const [empForm, setEmpForm] = useState(null);
     const [mgrForm, setMgrForm] = useState(null);
     const [stkFbs, setStkFbs] = useState([]);
@@ -45,19 +46,25 @@ export default function PanelReview() {
             api.get(`/cases/${caseId}/panel-review/mine`).then(r => r.data),
             api.get(`/ai/case/${caseId}/latest`).then(r => r.data),
         ]);
-        setC(cd); setCaps(capd); setEmpForm(ef); setMgrForm(mf); setStkFbs(stks); setDocs(dd.documents);
+        setC(cd); setAllCaps(capd); setEmpForm(ef); setMgrForm(mf); setStkFbs(stks); setDocs(dd.documents);
+        const nl = nextLevelFor(cd.employee?.level);
+        const lc = capsAtLevel(capd, nl);
         const existing = new Map((pr.capability_ratings || []).map(r => [r.capability_id, r]));
-        pr.capability_ratings = capd.map(cap => existing.get(cap.id) || { capability_id: cap.id, rating: "", rationale: "" });
+        pr.capability_ratings = lc.map(cap => existing.get(cap.id) || { capability_id: cap.id, rating: "", rationale: "" });
         setForm(pr);
         setAnalyses(lat);
     };
     useEffect(() => { reload(); }, [caseId]);
 
+    const nextLvl = c ? nextLevelFor(c.employee?.level) : 3;
+    const levelCaps = useMemo(() => capsAtLevel(allCaps, nextLvl), [allCaps, nextLvl]);
+    const grouped = useMemo(() => groupByPillarGcf(levelCaps), [levelCaps]);
+
     const save = async (override) => {
         const payload = { ...form, status: override || form.status || "draft" };
         const { data } = await api.put(`/cases/${caseId}/panel-review/mine`, payload);
         const existing = new Map((data.capability_ratings || []).map(r => [r.capability_id, r]));
-        data.capability_ratings = caps.map(cap => existing.get(cap.id) || { capability_id: cap.id, rating: "", rationale: "" });
+        data.capability_ratings = levelCaps.map(cap => existing.get(cap.id) || { capability_id: cap.id, rating: "", rationale: "" });
         setForm(data);
     };
 
@@ -84,7 +91,7 @@ export default function PanelReview() {
         setField("overall_rationale", a.overall_rationale || "");
         const byName = new Map((a.per_capability || []).map(x => [x.capability_name?.toLowerCase(), x]));
         const next = form.capability_ratings.map((r) => {
-            const cap = caps.find(c => c.id === r.capability_id);
+            const cap = levelCaps.find(c => c.id === r.capability_id);
             const hit = cap && byName.get(cap.name.toLowerCase());
             if (hit) return { ...r, rating: hit.rating || r.rating, rationale: hit.rationale || r.rationale };
             return r;
@@ -102,8 +109,8 @@ export default function PanelReview() {
         return (
             <tr key={cap.id} data-testid={`panel-consol-${cap.code}`}>
                 <td>
-                    <div className="font-semibold text-sm">{cap.name}</div>
-                    <div className="text-[11px] text-slate-500">{cap.pillar} · {cap.category}</div>
+                    <div className="text-sm">{cap.name}</div>
+                    <div className="text-[11px] text-slate-500 font-mono">{cap.code}</div>
                 </td>
                 <td><Rating level={self.current_level} next={self.demonstrated_next} /></td>
                 <td><Rating level={mgr.current_level} next={mgr.demonstrated_next} /></td>
@@ -154,9 +161,9 @@ export default function PanelReview() {
                 </AIPanel>
             ))}
 
-            {/* Consolidated table */}
+            {/* Consolidated table — grouped by pillar/gcf */}
             <div className="ldc-panel">
-                <div className="p-4 border-b border-slate-200 ldc-section-title">Consolidated capability view</div>
+                <div className="p-4 border-b border-slate-200 ldc-section-title">Consolidated capability view · L{nextLvl} framework ({levelCaps.length} competencies)</div>
                 <div className="overflow-auto">
                     <table className="ldc-table w-full">
                         <thead>
@@ -168,28 +175,68 @@ export default function PanelReview() {
                                 <th>Panel (you)</th>
                             </tr>
                         </thead>
-                        <tbody>{caps.map(capRow)}</tbody>
+                        <tbody>
+                            {grouped.map((p) => (
+                                <React.Fragment key={p.pillar_order}>
+                                    <tr className="bg-slate-100">
+                                        <td colSpan={5} className="font-semibold text-slate-800 text-xs uppercase tracking-widest">
+                                            Pillar {p.pillar_order} · {p.pillar}
+                                        </td>
+                                    </tr>
+                                    {p.gcfs.map((g) => (
+                                        <React.Fragment key={g.gcf_order}>
+                                            <tr className="bg-slate-50">
+                                                <td colSpan={5} className="text-xs font-semibold text-slate-600">
+                                                    {p.pillar_order}.{g.gcf_order} {g.gcf}
+                                                </td>
+                                            </tr>
+                                            {g.caps.map(cap => capRow(cap))}
+                                        </React.Fragment>
+                                    ))}
+                                </React.Fragment>
+                            ))}
+                        </tbody>
                     </table>
                 </div>
             </div>
 
-            {/* Per-capability rationales */}
+            {/* Per-capability rationales — grouped */}
             <div className="ldc-panel">
                 <div className="p-4 border-b border-slate-200 ldc-section-title">Panel rationale per capability</div>
-                <div className="p-4 space-y-3">
-                    {caps.map((cap) => {
-                        const i = form.capability_ratings.findIndex(r => r.capability_id === cap.id);
-                        const r = form.capability_ratings[i];
-                        return (
-                            <div key={cap.id} className="border border-slate-200 rounded p-3" data-testid={`panel-rat-${cap.code}`}>
-                                <div className="flex items-center justify-between">
-                                    <div className="text-sm font-semibold">{cap.name} <span className="text-xs font-normal text-slate-500">· {cap.pillar}</span></div>
-                                    {!readonly && <AIWriteButton text={r.rationale} onResult={(v) => setCap(i, "rationale", v)} context={`Panel rationale for ${cap.name}`} />}
-                                </div>
-                                <textarea rows={2} value={r.rationale || ""} onChange={(e) => setCap(i, "rationale", e.target.value)} disabled={readonly} className="w-full mt-2 px-2 py-1.5 border border-slate-300 rounded text-sm disabled:bg-slate-50" />
+                <div className="p-4 space-y-4">
+                    {grouped.map((p) => (
+                        <div key={p.pillar_order} className="space-y-2">
+                            <div className="flex items-baseline gap-2">
+                                <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Pillar {p.pillar_order}</div>
+                                <h3 className="text-base font-semibold text-slate-900">{p.pillar}</h3>
                             </div>
-                        );
-                    })}
+                            {p.gcfs.map((g) => (
+                                <div key={g.gcf_order} className="space-y-2">
+                                    <div className="flex items-baseline gap-2 pl-1 border-l-2 border-slate-300">
+                                        <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 ml-2">{p.pillar_order}.{g.gcf_order}</div>
+                                        <h4 className="text-sm font-semibold text-slate-700">{g.gcf}</h4>
+                                    </div>
+                                    {g.caps.map((cap) => {
+                                        const i = form.capability_ratings.findIndex(r => r.capability_id === cap.id);
+                                        const r = form.capability_ratings[i];
+                                        if (!r) return null;
+                                        return (
+                                            <div key={cap.id} className="border border-slate-200 rounded p-3 ml-4 bg-white" data-testid={`panel-rat-${cap.code}`}>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex-1 pr-2">
+                                                        <div className="text-sm font-medium">{cap.name}</div>
+                                                        <div className="text-[11px] text-slate-500 font-mono">{cap.code}</div>
+                                                    </div>
+                                                    {!readonly && <AIWriteButton text={r.rationale} onResult={(v) => setCap(i, "rationale", v)} context={`Panel rationale for ${cap.name}`} />}
+                                                </div>
+                                                <textarea rows={2} value={r.rationale || ""} onChange={(e) => setCap(i, "rationale", e.target.value)} disabled={readonly} className="w-full mt-2 px-2 py-1.5 border border-slate-300 rounded text-sm disabled:bg-slate-50" />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ))}
+                        </div>
+                    ))}
                 </div>
             </div>
 

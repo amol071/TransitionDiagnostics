@@ -70,10 +70,16 @@ class Capability(BaseModel):
     code: str
     name: str
     pillar: str
-    category: Literal["necessary", "differentiating"]
-    current_level_desc: str
-    next_level_desc: str
+    pillar_order: int = 0
+    gcf: str = ""
+    gcf_order: int = 0
+    competency_order: int = 0
+    level: int = 3  # 1..4 (LDC default L3)
     order: int = 0
+    # legacy (optional, unused now but kept for backward-compat)
+    category: Optional[str] = None
+    current_level_desc: Optional[str] = None
+    next_level_desc: Optional[str] = None
 
 
 # ---------- Case ----------

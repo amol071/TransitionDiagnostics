@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import StatusBadge from "@/components/StatusBadge";
 import { AIWriteButton, useAutoSave, SaveIndicator } from "@/components/AIHelpers";
+import { nextLevelFor, capsAtLevel, groupByPillarGcf } from "@/lib/gcf";
 import { CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -11,7 +12,7 @@ const LEVELS = ["", "Below", "Meets", "Exceeds"];
 export default function StakeholderForm() {
     const { caseId } = useParams();
     const [c, setC] = useState(null);
-    const [caps, setCaps] = useState([]);
+    const [allCaps, setAllCaps] = useState([]);
     const [form, setForm] = useState(null);
 
     useEffect(() => {
@@ -20,23 +21,29 @@ export default function StakeholderForm() {
             api.get(`/capabilities`).then(r => r.data),
             api.get(`/cases/${caseId}/stakeholder-feedback/mine`).then(r => r.data),
         ]).then(([cd, capd, fd]) => {
-            setC(cd); setCaps(capd);
+            setC(cd); setAllCaps(capd);
+            const nl = nextLevelFor(cd.employee?.level);
+            const lc = capsAtLevel(capd, nl);
             const existing = new Map((fd.capability_responses || []).map(r => [r.capability_id, r]));
-            fd.capability_responses = capd.map(cap => existing.get(cap.id) || {
+            fd.capability_responses = lc.map(cap => existing.get(cap.id) || {
                 capability_id: cap.id, current_level: "", demonstrated_next: false, rationale: ""
             });
             setForm(fd);
         });
     }, [caseId]);
 
+    const nextLvl = c ? nextLevelFor(c.employee?.level) : 3;
+    const levelCaps = useMemo(() => capsAtLevel(allCaps, nextLvl), [allCaps, nextLvl]);
+    const grouped = useMemo(() => groupByPillarGcf(levelCaps), [levelCaps]);
+
     const save = async (override) => {
         const payload = { ...form, status: override || form.status || "draft" };
         const { data } = await api.put(`/cases/${caseId}/stakeholder-feedback/mine`, payload);
+        const existing = new Map((data.capability_responses || []).map(r => [r.capability_id, r]));
         setForm({
             ...data,
-            capability_responses: caps.map(cap => {
-                const ex = (data.capability_responses || []).find(r => r.capability_id === cap.id);
-                return ex || { capability_id: cap.id, current_level: "", demonstrated_next: false, rationale: "" };
+            capability_responses: levelCaps.map(cap => existing.get(cap.id) || {
+                capability_id: cap.id, current_level: "", demonstrated_next: false, rationale: ""
             }),
         });
     };
@@ -64,35 +71,50 @@ export default function StakeholderForm() {
             </div>
 
             <div className="ldc-panel">
-                <div className="p-4 border-b border-slate-200"><div className="ldc-section-title">Capability-wise feedback</div></div>
-                <div className="p-4 space-y-2">
-                    {form.capability_responses.map((r, i) => {
-                        const cap = caps.find(c => c.id === r.capability_id);
-                        if (!cap) return null;
-                        return (
-                            <div key={cap.id} className="border border-slate-200 rounded p-3 space-y-2" data-testid={`stk-cap-${cap.code}`}>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="text-sm font-semibold">{cap.name}</div>
-                                        <div className="text-xs text-slate-500">{cap.pillar}</div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <select value={r.current_level || ""} onChange={(e) => setCap(i, "current_level", e.target.value)} disabled={readonly} className="px-2 py-1 border border-slate-300 rounded text-sm disabled:bg-slate-50">
-                                            {LEVELS.map(l => <option key={l} value={l}>{l || "Rating"}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-                                <textarea
-                                    placeholder="Specific observations / examples"
-                                    rows={2}
-                                    value={r.rationale || ""}
-                                    onChange={(e) => setCap(i, "rationale", e.target.value)}
-                                    disabled={readonly}
-                                    className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm disabled:bg-slate-50"
-                                />
+                <div className="p-4 border-b border-slate-200"><div className="ldc-section-title">Capability-wise feedback · L{nextLvl} framework</div></div>
+                <div className="p-4 space-y-5">
+                    {grouped.map((p) => (
+                        <div key={p.pillar_order} className="space-y-2" data-testid={`stk-pillar-${p.pillar_order}`}>
+                            <div className="flex items-baseline gap-2">
+                                <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Pillar {p.pillar_order}</div>
+                                <h3 className="text-lg font-semibold text-slate-900">{p.pillar}</h3>
                             </div>
-                        );
-                    })}
+                            {p.gcfs.map((g) => (
+                                <div key={g.gcf_order} className="space-y-2">
+                                    <div className="flex items-baseline gap-2 pl-1 border-l-2 border-slate-300">
+                                        <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 ml-2">{p.pillar_order}.{g.gcf_order}</div>
+                                        <h4 className="text-sm font-semibold text-slate-700">{g.gcf}</h4>
+                                    </div>
+                                    {g.caps.map((cap) => {
+                                        const i = form.capability_responses.findIndex(x => x.capability_id === cap.id);
+                                        const r = i >= 0 ? form.capability_responses[i] : null;
+                                        if (!r) return null;
+                                        return (
+                                            <div key={cap.id} className="border border-slate-200 rounded p-3 space-y-2 ml-4 bg-white" data-testid={`stk-cap-${cap.code}`}>
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="flex-1">
+                                                        <div className="text-sm font-medium">{cap.name}</div>
+                                                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">{cap.code}</div>
+                                                    </div>
+                                                    <select value={r.current_level || ""} onChange={(e) => setCap(i, "current_level", e.target.value)} disabled={readonly} className="px-2 py-1 border border-slate-300 rounded text-sm disabled:bg-slate-50">
+                                                        {LEVELS.map(l => <option key={l} value={l}>{l || "Rating"}</option>)}
+                                                    </select>
+                                                </div>
+                                                <textarea
+                                                    placeholder="Specific observations / examples"
+                                                    rows={2}
+                                                    value={r.rationale || ""}
+                                                    onChange={(e) => setCap(i, "rationale", e.target.value)}
+                                                    disabled={readonly}
+                                                    className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm disabled:bg-slate-50"
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ))}
+                        </div>
+                    ))}
                 </div>
             </div>
 
