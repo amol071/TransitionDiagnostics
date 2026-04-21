@@ -9,6 +9,7 @@ export default function Uploads() {
     const { caseId } = useParams();
     const [data, setData] = useState({ documents: [], latest_by_type: {} });
     const [c, setC] = useState(null);
+    const [busyType, setBusyType] = useState("");
     const fileRefs = useRef({});
 
     const reload = async () => {
@@ -22,18 +23,19 @@ export default function Uploads() {
 
     const upload = async (docType, file) => {
         if (!file) return;
+        setBusyType(docType);
         const fd = new FormData();
         fd.append("doc_type", docType);
         fd.append("file", file);
         try {
-            await api.post(`/cases/${caseId}/documents?doc_type=${docType}`, fd, {
-                params: { doc_type: docType },
-                headers: { "Content-Type": "multipart/form-data" },
-            });
+            // Let axios auto-set the multipart boundary — don't override Content-Type.
+            await api.post(`/cases/${caseId}/documents`, fd);
             toast.success("Uploaded");
-            reload();
+            await reload();
         } catch (e) {
             toast.error(e?.response?.data?.detail || "Upload failed");
+        } finally {
+            setBusyType("");
         }
     };
 
@@ -41,7 +43,7 @@ export default function Uploads() {
         if (!window.confirm("Delete this document?")) return;
         await api.delete(`/cases/${caseId}/documents/${id}`);
         toast.success("Deleted");
-        reload();
+        await reload();
     };
 
     const token = localStorage.getItem("ldc_token");
@@ -69,7 +71,9 @@ export default function Uploads() {
                                         <div className="text-xs text-slate-500">{t}</div>
                                     </td>
                                     <td>
-                                        {latest ? (
+                                        {busyType === t ? (
+                                            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 animate-pulse"><UploadSimple size={12} /> Uploading…</span>
+                                        ) : latest ? (
                                             <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle size={12} weight="fill" /> Uploaded</span>
                                         ) : (
                                             <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200"><Clock size={12} /> Missing</span>
@@ -94,6 +98,7 @@ export default function Uploads() {
                                             />
                                             <button
                                                 onClick={() => fileRefs.current[t]?.click()}
+                                                disabled={busyType === t}
                                                 data-testid={`upload-${t}`}
                                                 className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded border border-slate-300 hover:bg-slate-50"
                                             >
