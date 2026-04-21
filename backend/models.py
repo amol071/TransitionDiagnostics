@@ -46,6 +46,41 @@ class LoginResponse(BaseModel):
     user: UserPublic
 
 
+# ---------- Master Data ----------
+class Company(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=_uuid)
+    code: str
+    name: str
+    short_name: Optional[str] = None
+
+
+class Function(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=_uuid)
+    code: str
+    name: str
+
+
+class BusinessUnit(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=_uuid)
+    code: str
+    name: str
+    company_code: str
+    company_id: Optional[str] = None
+
+
+class Level(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=_uuid)
+    code: str
+    name: str
+    band: str
+    ldc_level: int = 3  # 1..4
+    order: int = 0
+
+
 # ---------- Employee ----------
 class Employee(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -58,6 +93,11 @@ class Employee(BaseModel):
     bu: str
     function: str
     level: str
+    # Master-data references (optional for backward-compat with older docs)
+    company_id: Optional[str] = None
+    function_id: Optional[str] = None
+    bu_id: Optional[str] = None
+    level_id: Optional[str] = None
     manager_id: Optional[str] = None
     hrbp_id: Optional[str] = None
     created_at: str = Field(default_factory=_now)

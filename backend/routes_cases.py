@@ -31,6 +31,23 @@ async def list_employees(user=Depends(get_current_user)):
 @router.post("/employees")
 async def create_employee(payload: dict, user=Depends(require_roles("admin", "coordinator"))):
     import uuid
+    # Denormalize master data labels if IDs were provided
+    if payload.get("company_id") and not payload.get("company"):
+        comp = await db.master_companies.find_one({"id": payload["company_id"]}, {"_id": 0})
+        if comp:
+            payload["company"] = comp.get("short_name") or comp["name"]
+    if payload.get("function_id") and not payload.get("function"):
+        fn = await db.master_functions.find_one({"id": payload["function_id"]}, {"_id": 0})
+        if fn:
+            payload["function"] = fn["name"]
+    if payload.get("bu_id") and not payload.get("bu"):
+        bu = await db.master_business_units.find_one({"id": payload["bu_id"]}, {"_id": 0})
+        if bu:
+            payload["bu"] = bu["name"]
+    if payload.get("level_id") and not payload.get("level"):
+        lv = await db.master_levels.find_one({"id": payload["level_id"]}, {"_id": 0})
+        if lv:
+            payload["level"] = lv["code"]
     doc = {"id": str(uuid.uuid4()), **payload, "created_at": _now()}
     await db.employees.insert_one(doc)
     doc.pop("_id", None)

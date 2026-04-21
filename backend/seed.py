@@ -3,10 +3,111 @@ import uuid
 from datetime import datetime, timezone
 from core import db, hash_password
 from gcf_framework import all_capabilities
+from master_data import COMPANIES, FUNCTIONS, BUSINESS_UNITS, LEVELS
+
+
+async def seed_master_data():
+    """Idempotent master-data seed. Runs on every startup to upsert
+    Companies, Functions, Business Units and Levels keyed by their `code`.
+    Also backfills `company_id`, `function_id`, `bu_id`, `level_id` onto
+    existing employees by matching legacy string fields."""
+    # Companies
+    company_code_to_id: dict = {}
+    for c in COMPANIES:
+        existing = await db.master_companies.find_one({"code": c["code"]}, {"_id": 0})
+        if existing:
+            company_code_to_id[c["code"]] = existing["id"]
+            await db.master_companies.update_one(
+                {"code": c["code"]}, {"$set": {"name": c["name"], "short_name": c.get("short_name")}}
+            )
+        else:
+            doc = {"id": str(uuid.uuid4()), **c}
+            await db.master_companies.insert_one(doc)
+            company_code_to_id[c["code"]] = doc["id"]
+
+    # Functions
+    function_code_to_id: dict = {}
+    for f in FUNCTIONS:
+        existing = await db.master_functions.find_one({"code": f["code"]}, {"_id": 0})
+        if existing:
+            function_code_to_id[f["code"]] = existing["id"]
+            await db.master_functions.update_one({"code": f["code"]}, {"$set": {"name": f["name"]}})
+        else:
+            doc = {"id": str(uuid.uuid4()), **f}
+            await db.master_functions.insert_one(doc)
+            function_code_to_id[f["code"]] = doc["id"]
+
+    # Business Units
+    bu_code_to_id: dict = {}
+    for b in BUSINESS_UNITS:
+        company_id = company_code_to_id.get(b["company_code"])
+        existing = await db.master_business_units.find_one({"code": b["code"]}, {"_id": 0})
+        if existing:
+            bu_code_to_id[b["code"]] = existing["id"]
+            await db.master_business_units.update_one(
+                {"code": b["code"]},
+                {"$set": {"name": b["name"], "company_code": b["company_code"], "company_id": company_id}},
+            )
+        else:
+            doc = {"id": str(uuid.uuid4()), **b, "company_id": company_id}
+            await db.master_business_units.insert_one(doc)
+            bu_code_to_id[b["code"]] = doc["id"]
+
+    # Levels
+    level_code_to_id: dict = {}
+    for lv in LEVELS:
+        existing = await db.master_levels.find_one({"code": lv["code"]}, {"_id": 0})
+        if existing:
+            level_code_to_id[lv["code"]] = existing["id"]
+            await db.master_levels.update_one(
+                {"code": lv["code"]},
+                {"$set": {"name": lv["name"], "band": lv["band"], "ldc_level": lv["ldc_level"], "order": lv["order"]}},
+            )
+        else:
+            doc = {"id": str(uuid.uuid4()), **lv}
+            await db.master_levels.insert_one(doc)
+            level_code_to_id[lv["code"]] = doc["id"]
+
+    # ---- Backfill existing employees with master-data IDs ----
+    # Match by: company name/short_name, function name, BU name, level code (e.g. "L2" -> ldc_level 2)
+    async for emp in db.employees.find({}):
+        patch: dict = {}
+        if not emp.get("company_id") and emp.get("company"):
+            comp = await db.master_companies.find_one(
+                {"$or": [{"name": emp["company"]}, {"short_name": emp["company"]}, {"code": emp["company"]}]},
+                {"_id": 0},
+            )
+            if comp:
+                patch["company_id"] = comp["id"]
+        if not emp.get("function_id") and emp.get("function"):
+            fn = await db.master_functions.find_one(
+                {"$or": [{"name": emp["function"]}, {"code": emp["function"]}]}, {"_id": 0}
+            )
+            if fn:
+                patch["function_id"] = fn["id"]
+        if not emp.get("bu_id") and emp.get("bu"):
+            bu = await db.master_business_units.find_one(
+                {"$or": [{"name": emp["bu"]}, {"code": emp["bu"]}]}, {"_id": 0}
+            )
+            if bu:
+                patch["bu_id"] = bu["id"]
+        if not emp.get("level_id") and emp.get("level"):
+            lv_str = str(emp["level"])
+            q: dict = {"$or": [{"code": lv_str}, {"name": lv_str}]}
+            if lv_str.upper().startswith("L") and lv_str[1:].isdigit():
+                q["$or"].append({"ldc_level": int(lv_str[1:])})
+            lv = await db.master_levels.find_one(q, {"_id": 0})
+            if lv:
+                patch["level_id"] = lv["id"]
+        if patch:
+            await db.employees.update_one({"id": emp["id"]}, {"$set": patch})
 
 
 async def seed_all():
-    # Skip if already seeded
+    # Always run master-data seed first (idempotent, runs every startup)
+    await seed_master_data()
+
+    # Skip demo users/cases if already seeded
     existing = await db.users.find_one({"email": "admin@ldc.io"})
     if existing:
         return False

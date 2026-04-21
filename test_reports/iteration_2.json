@@ -1,0 +1,42 @@
+{
+  "summary": "Backend-only testing of new master-data ingestion (Companies/Functions/Business Units/Levels) plus POST /api/employees denormalization + RBAC, and regression smoke on cases/capabilities/employees/login/dashboard. Wrote /app/backend/tests/test_master_data.py (25 tests). All 25 new tests PASS. Also fixed 3 stale hard-coded assertions in the pre-existing backend_test.py (capabilities count 8→>=8, employees 3→>=3, cases 3→>=3) after seed expansion — re-running the combined suite yields 64/64 PASS.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/employees", "issue": "No uniqueness check on emp_id/email — repeated POSTs with same emp_id create duplicate employee rows."},
+      {"endpoint": "POST /api/employees", "issue": "Bogus master *_id values (non-existent UUIDs) are silently accepted and left on the doc with no denormalization and no 400 — consider validating master IDs and returning 400 for unknown references."},
+      {"endpoint": "GET /api/master/*", "issue": "No pagination / search / filter (e.g., business-units by company_code). Fine for 8/20/25/9 rows but will need it if Godrej expands masters."},
+      {"endpoint": "seed.py seed_master_data backfill", "issue": "Level backfill for 'L2' -> ldc_level 2 matches the FIRST level with ldc_level==2 (E1 or M1). Current stored level string 'M1' is fine, but legacy 'L2' string now gets a level_id pointing at whichever of {M1, M2} Mongo returns first — could be non-deterministic. Consider matching on band or deterministic ordering."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_master_data.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/master_data_results.xml"
+  ],
+  "action_items": [
+    "Optional: validate master IDs on POST /api/employees — return 400 on unknown company_id/function_id/bu_id/level_id instead of silently ignoring.",
+    "Optional: add unique index on employees.emp_id (currently 26 NovaCorp + test rows; re-posting same emp_id duplicates).",
+    "Optional: tighten backfill match for level (prefer band match over ldc_level when legacy string is ambiguous)."
+  ],
+  "critical_code_review_comments": [
+    "routes_master.py: all 5 endpoints are trivial find-all queries with no pagination. Acceptable for current sizes; add server-side sort+projection is already done. Good: _id is excluded.",
+    "seed.py seed_master_data: idempotent via upsert on `code`. Verified repeat startup keeps counts stable and no duplicate codes exist.",
+    "routes_cases.py create_employee: denormalization order-of-precedence is correct (only fills string when id provided AND string absent). However no validation that provided *_id actually resolves — callers can pass junk and get a half-populated employee doc.",
+    "master_data.py BUSINESS_UNITS: all 25 BUs resolve to a known company_code, so no orphan BUs can be seeded.",
+    "No cleanup of TEST_* employees written during test runs — DB accumulates TEST_DN_*, TEST_LEG_*, TEST_BOGUS_* rows. Consider adding a teardown fixture."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_master_data.py",
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100% (64/64 across both test files)", "frontend": "not tested"},
+  "test_credentials": "Used /app/memory/test_credentials.md — admin@ldc.io / Admin@123, mary.mgr@ldc.io / Demo@123, alice.emp@ldc.io / Demo@123.",
+  "seed_data_creation": "Master data seeded on startup (COMPANIES=8, FUNCTIONS=20, BUSINESS_UNITS=25, LEVELS=9). Tests also created ~3 TEST_* employees per run (TEST_DN_*, TEST_LEG_*, TEST_BOGUS_*) — total employees in DB now 29.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Master data endpoints fully green. GET /api/master/{companies|functions|business-units|levels|all} return expected counts (>=8/20/25/9), require auth, and exclude Mongo _id. POST /api/employees denormalizes master IDs to strings (company/function/bu/level), returns 403 for manager/employee, 401 unauthenticated, and silently tolerates unknown master IDs (no crash). Seed is idempotent — no duplicate codes across repeated startups. Backfill populates function_id on 10 of 29 legacy employees (names that happen to match master FUNCTIONS like Engineering/Marketing/Supply Chain) and level_id on 28 (L2/L3 -> ldc_level 2/3), as expected. Employees table has grown to 29 (3 original Alice/Bob/Diana + 22 extra Indian-named NovaCorp employees seeded by seed.py + ~4 TEST_* rows). Existing iteration_1 test assertions that hard-coded 8 capabilities / 3 employees / 3 cases were loosened to >= comparisons. No action required from main agent unless wanting to implement the optional hardening items (validate master IDs, unique emp_id index, deterministic level backfill).",
+  "rca of the issue": "N/A — all targeted behaviors work. The 3 initial backend_test.py failures were stale hard-coded counts in prior iteration assertions (not product bugs) caused by seed expansion (capabilities: GCF framework now emits 122 rows; employees: seed adds 22 dummy Indian-named rows; cases: Bob prior FY25 case also visible). Fixed by switching to >= assertions."
+}

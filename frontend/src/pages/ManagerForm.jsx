@@ -7,6 +7,7 @@ import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator } from "@/componen
 import { nextLevelFor, capsAtLevel, groupByPillarGcf } from "@/lib/gcf";
 import { Plus, Trash, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { Combobox } from "@/components/Combobox";
 
 const LEVELS = ["", "Below", "Meets", "Exceeds"];
 const READINESS = [
@@ -22,14 +23,16 @@ export default function ManagerForm() {
     const [allCaps, setAllCaps] = useState([]);
     const [form, setForm] = useState(null);
     const [aiSuggestions, setAiSuggestions] = useState(null);
+    const [directory, setDirectory] = useState([]);
 
     useEffect(() => {
         Promise.all([
             api.get(`/cases/${caseId}`).then(r => r.data),
             api.get(`/capabilities`).then(r => r.data),
             api.get(`/cases/${caseId}/manager-form`).then(r => r.data),
-        ]).then(([cd, capd, fd]) => {
-            setC(cd); setAllCaps(capd);
+            api.get(`/employees`).then(r => r.data).catch(() => []),
+        ]).then(([cd, capd, fd, emp]) => {
+            setC(cd); setAllCaps(capd); setDirectory(emp || []);
             const nl = nextLevelFor(cd.employee?.level);
             const lc = capsAtLevel(capd, nl);
             const existing = new Map((fd.capability_responses || []).map(r => [r.capability_id, r]));
@@ -170,7 +173,38 @@ export default function ManagerForm() {
 
             <div className="ldc-panel">
                 <div className="p-4 border-b border-slate-200"><div className="ldc-section-title">Stakeholder identification (minimum 3)</div></div>
-                <div className="p-4 space-y-2">
+                <div className="p-4 space-y-3">
+                    {!readonly && directory.length > 0 && (
+                        <div className="flex items-center gap-2 p-2 rounded bg-slate-50 border border-slate-200">
+                            <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 whitespace-nowrap">Pick from directory</div>
+                            <div className="flex-1">
+                                <Combobox
+                                    testid="stk-directory-picker"
+                                    value=""
+                                    allowClear={false}
+                                    onChange={(id) => {
+                                        const e = directory.find((x) => x.id === id);
+                                        if (!e) return;
+                                        const exists = (form.stakeholders || []).some((s) => s.email === e.email);
+                                        if (exists) { toast.error(`${e.name} already added`); return; }
+                                        const empty = (form.stakeholders || []).findIndex((s) => !s.name && !s.email);
+                                        const row = { name: e.name, email: e.email, relationship: "" };
+                                        let arr;
+                                        if (empty >= 0) {
+                                            arr = [...form.stakeholders];
+                                            arr[empty] = row;
+                                        } else {
+                                            arr = [...(form.stakeholders || []), row];
+                                        }
+                                        setForm({ ...form, stakeholders: arr });
+                                        mark();
+                                    }}
+                                    options={directory.map((e) => ({ id: e.id, label: `${e.name} (${e.emp_id})`, sub: `${e.email} · ${e.bu} · ${e.function}` }))}
+                                    placeholder="Search employee directory…"
+                                />
+                            </div>
+                        </div>
+                    )}
                     <table className="ldc-table w-full">
                         <thead><tr><th>Name</th><th>Email</th><th>Relationship</th><th></th></tr></thead>
                         <tbody>

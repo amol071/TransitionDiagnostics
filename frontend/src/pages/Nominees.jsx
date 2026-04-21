@@ -13,18 +13,21 @@ export default function Nominees() {
     const [cases, setCases] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [users, setUsers] = useState([]);
+    const [master, setMaster] = useState({ companies: [], functions: [], business_units: [], levels: [] });
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [showAdd, setShowAdd] = useState(false);
+    const [showAddEmp, setShowAddEmp] = useState(false);
 
     const reload = async () => {
         setLoading(true);
-        const [c, e, u] = await Promise.all([
+        const [c, e, u, m] = await Promise.all([
             api.get("/cases").then(r => r.data),
             api.get("/employees").then(r => r.data),
             api.get("/auth/users").then(r => r.data),
+            api.get("/master/all").then(r => r.data),
         ]);
-        setCases(c); setEmployees(e); setUsers(u);
+        setCases(c); setEmployees(e); setUsers(u); setMaster(m);
         setLoading(false);
     };
 
@@ -50,13 +53,22 @@ export default function Nominees() {
                     <h1 className="text-2xl font-semibold tracking-tight mt-1">Nominees & cases</h1>
                 </div>
                 {hasRole("admin", "coordinator") && (
-                    <button
-                        data-testid="add-nominee-btn"
-                        onClick={() => setShowAdd(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded hover:bg-slate-800"
-                    >
-                        <Plus size={16} weight="bold" /> Add nominee
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            data-testid="add-employee-btn"
+                            onClick={() => setShowAddEmp(true)}
+                            className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-sm font-semibold rounded hover:bg-slate-50"
+                        >
+                            <Plus size={16} weight="bold" /> Add employee
+                        </button>
+                        <button
+                            data-testid="add-nominee-btn"
+                            onClick={() => setShowAdd(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded hover:bg-slate-800"
+                        >
+                            <Plus size={16} weight="bold" /> Add nominee
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -142,6 +154,112 @@ export default function Nominees() {
             </div>
 
             {showAdd && <AddNomineeDialog onClose={() => setShowAdd(false)} onSaved={reload} employees={employees} users={users} existing={cases} />}
+            {showAddEmp && <AddEmployeeDialog onClose={() => setShowAddEmp(false)} onSaved={reload} master={master} />}
+        </div>
+    );
+}
+
+function AddEmployeeDialog({ onClose, onSaved, master }) {
+    const [form, setForm] = useState({
+        emp_id: "",
+        emp_code: "",
+        name: "",
+        email: "",
+        company_id: "",
+        bu_id: "",
+        function_id: "",
+        level_id: "",
+    });
+
+    const filteredBUs = master.business_units.filter((b) => !form.company_id || b.company_id === form.company_id);
+
+    const submit = async () => {
+        if (!form.name.trim() || !form.email.trim() || !form.emp_id.trim()) {
+            toast.error("Name, email and employee ID are required");
+            return;
+        }
+        if (!form.company_id || !form.bu_id || !form.function_id || !form.level_id) {
+            toast.error("Select Company, BU, Function and Level");
+            return;
+        }
+        try {
+            const payload = { ...form, emp_code: form.emp_code || form.emp_id };
+            await api.post("/employees", payload);
+            toast.success("Employee added");
+            onSaved();
+            onClose();
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "Failed");
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/40 grid place-items-center z-50 p-4" role="dialog">
+            <div className="bg-white rounded-md border border-slate-200 shadow-lg w-full max-w-lg" data-testid="add-employee-dialog">
+                <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                    <div className="ldc-section-title">Add employee</div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-900" data-testid="close-add-employee">✕</button>
+                </div>
+                <div className="p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                        <Field label="Employee ID">
+                            <input value={form.emp_id} onChange={(e) => setForm({ ...form, emp_id: e.target.value })} data-testid="add-emp-id" className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm" />
+                        </Field>
+                        <Field label="Employee code">
+                            <input value={form.emp_code} onChange={(e) => setForm({ ...form, emp_code: e.target.value })} data-testid="add-emp-code" className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm" placeholder="Optional · defaults to ID" />
+                        </Field>
+                    </div>
+                    <Field label="Full name">
+                        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="add-emp-name" className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm" />
+                    </Field>
+                    <Field label="Email">
+                        <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} data-testid="add-emp-email" className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm" />
+                    </Field>
+                    <Field label="Company">
+                        <Combobox
+                            testid="add-emp-company"
+                            value={form.company_id}
+                            onChange={(v) => setForm({ ...form, company_id: v, bu_id: "" })}
+                            options={master.companies.map((c) => ({ id: c.id, label: c.name, sub: c.code }))}
+                            placeholder="Search companies…"
+                        />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-3">
+                        <Field label="Business unit">
+                            <Combobox
+                                testid="add-emp-bu"
+                                value={form.bu_id}
+                                onChange={(v) => setForm({ ...form, bu_id: v })}
+                                options={filteredBUs.map((b) => ({ id: b.id, label: b.name, sub: b.code }))}
+                                placeholder={form.company_id ? "Search business units…" : "Select company first"}
+                                disabled={!form.company_id}
+                            />
+                        </Field>
+                        <Field label="Function">
+                            <Combobox
+                                testid="add-emp-function"
+                                value={form.function_id}
+                                onChange={(v) => setForm({ ...form, function_id: v })}
+                                options={master.functions.map((f) => ({ id: f.id, label: f.name, sub: f.code }))}
+                                placeholder="Search functions…"
+                            />
+                        </Field>
+                    </div>
+                    <Field label="Level / Band">
+                        <Combobox
+                            testid="add-emp-level"
+                            value={form.level_id}
+                            onChange={(v) => setForm({ ...form, level_id: v })}
+                            options={master.levels.map((l) => ({ id: l.id, label: `${l.code} · ${l.name}`, sub: `LDC L${l.ldc_level}` }))}
+                            placeholder="Search levels…"
+                        />
+                    </Field>
+                </div>
+                <div className="p-4 border-t border-slate-200 flex justify-end gap-2">
+                    <button onClick={onClose} className="px-3 py-1.5 text-sm border border-slate-300 rounded">Cancel</button>
+                    <button onClick={submit} data-testid="submit-add-employee" className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-800">Create employee</button>
+                </div>
+            </div>
         </div>
     );
 }

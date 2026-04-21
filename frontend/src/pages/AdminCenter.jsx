@@ -12,6 +12,7 @@ export default function AdminCenter() {
     const [users, setUsers] = useState([]);
     const [caps, setCaps] = useState([]);
     const [cases, setCases] = useState([]);
+    const [master, setMaster] = useState({ companies: [], functions: [], business_units: [], levels: [] });
 
     useEffect(() => {
         if (!hasRole("admin")) nav("/app");
@@ -19,7 +20,8 @@ export default function AdminCenter() {
             api.get("/auth/users").then(r => r.data),
             api.get("/capabilities").then(r => r.data),
             api.get("/cases").then(r => r.data),
-        ]).then(([u, cp, c]) => { setUsers(u); setCaps(cp); setCases(c); });
+            api.get("/master/all").then(r => r.data),
+        ]).then(([u, cp, c, m]) => { setUsers(u); setCaps(cp); setCases(c); setMaster(m); });
     }, []);
 
     const reopen = async (caseId, formType) => {
@@ -88,6 +90,18 @@ export default function AdminCenter() {
                 </div>
 
                 <div className="ldc-panel">
+                    <div className="p-4 border-b border-slate-200 ldc-section-title">
+                        Master data · Godrej reference tables
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+                        <MasterList title="Companies" count={master.companies.length} testid="master-companies" rows={master.companies.map(c => ({ key: c.id, a: c.code, b: c.name, c: c.short_name || "" }))} headers={["Code", "Name", "Short"]} />
+                        <MasterList title="Functions" count={master.functions.length} testid="master-functions" rows={master.functions.map(f => ({ key: f.id, a: f.code, b: f.name }))} headers={["Code", "Name"]} />
+                        <MasterList title="Business units" count={master.business_units.length} testid="master-bus" rows={master.business_units.map(b => ({ key: b.id, a: b.code, b: b.name, c: b.company_code }))} headers={["Code", "Name", "Co."]} />
+                        <MasterList title="Levels" count={master.levels.length} testid="master-levels" rows={master.levels.map(l => ({ key: l.id, a: l.code, b: l.name, c: `L${l.ldc_level}` }))} headers={["Code", "Name", "LDC"]} />
+                    </div>
+                </div>
+
+                <div className="ldc-panel">
                     <div className="p-4 border-b border-slate-200 ldc-section-title">Reopen forms</div>
                     <table className="ldc-table w-full">
                         <thead><tr><th>Case</th><th>Status</th><th>Actions</th></tr></thead>
@@ -114,6 +128,33 @@ export default function AdminCenter() {
                     </table>
                 </div>
             </main>
+        </div>
+    );
+}
+
+function MasterList({ title, count, testid, rows, headers }) {
+    return (
+        <div className="p-4" data-testid={testid}>
+            <div className="flex items-baseline justify-between mb-2">
+                <div className="text-sm font-semibold text-slate-800">{title}</div>
+                <div className="text-[11px] text-slate-400">{count}</div>
+            </div>
+            <div className="max-h-72 overflow-auto border border-slate-100 rounded">
+                <table className="ldc-table w-full">
+                    <thead className="sticky top-0 bg-white">
+                        <tr>{headers.map((h) => <th key={h} className="text-[10px]">{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((r) => (
+                            <tr key={r.key}>
+                                <td className="font-mono text-[10px] whitespace-nowrap">{r.a}</td>
+                                <td className="text-xs">{r.b}</td>
+                                {headers.length > 2 && <td className="text-[11px] text-slate-500">{r.c}</td>}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 }
