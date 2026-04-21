@@ -17,6 +17,18 @@ Production-ready internal enterprise web application for a Leadership Developmen
 - **HR / HRBP** (hr.lead@ldc.io) — final summary report with AI drafts.
 - **Stakeholder** (stake.one@ldc.io) — capability-wise feedback.
 
+## What's Implemented (2026-04-21 v3) · Master Data Ingestion
+- **Master reference tables** — new `master_companies`, `master_functions`, `master_business_units`, `master_levels` Mongo collections.
+- **`/app/backend/master_data.py`** seeds Godrej-aligned reference data: 8 Companies (GCPL, GPL, GAVL, GIL, G&B, GCap, GHF, GFL), 20 Functions, 25 Business Units (scoped per-company via `company_code`/`company_id`), and 9 Levels/Bands (E1–E7 + M1–M4) mapped to LDC L1–L4.
+- **`seed_master_data()`** runs on every startup (idempotent upsert keyed on `code`), and backfills existing employees with `company_id`/`function_id`/`bu_id`/`level_id` when legacy string fields match.
+- **New models in `models.py`**: `Company`, `Function`, `BusinessUnit`, `Level`; `Employee` now has optional `company_id`, `function_id`, `bu_id`, `level_id` foreign-key fields.
+- **New read-only routes** (`routes_master.py`): `GET /api/master/companies`, `/api/master/functions`, `/api/master/business-units`, `/api/master/levels`, `/api/master/all`.
+- **`POST /api/employees`** now auto-denormalizes the readable string fields (company, bu, function, level) when master IDs are supplied.
+- **Admin Center** — added a "Master data · Godrej reference tables" panel that renders all four tables with counts.
+- **Nominees page** — new **Add employee** button + dialog that uses the Combobox for Company/BU/Function/Level, with BU filtered by selected Company.
+- **Manager form stakeholders** — new "Pick from directory" typeahead Combobox that auto-fills Name+Email from the employee directory.
+- **Testing**: 64/64 backend tests passing (`/app/test_reports/iteration_2.json`; new file `/app/backend/tests/test_master_data.py` covers 25 master-data assertions).
+
 ## What's Implemented (2026-04-21 v2)
 
 ### Product rename & gated entry
@@ -73,21 +85,24 @@ Production-ready internal enterprise web application for a Leadership Developmen
 
 ## Backlog
 ### P1
+- **AI Bias & Consistency Checker** across all reviews (employee vs manager vs stakeholder vs panel) — deeper LLM analysis feeding the panel/HR step.
 - Per-PUT ownership unit tests (role guards were added after backend test run — retest recommended).
-- Document OCR / parsed_text pipeline for AI document_summary.
+- Document OCR / parsed_text pipeline for AI document_summary (already live for PDFs; extend to images via OCR).
 - 360 / psychometric PDF parse → feed into integrated_summary.
 - Stakeholder email-notification service (currently only on case launch).
+- **Master data hardening**: validate `company_id` / `function_id` / `bu_id` / `level_id` on `POST /api/employees` (return 400 on unknown); add unique index on `employees.emp_id`; tighten level backfill (prefer band match over ldc_level).
 
 ### P2
-- Notifications (in-app + email service abstraction).
+- **AI Development Plan Generator** for weak capabilities (per-capability structured suggestions).
+- Master data CRUD UI (admin-only) — currently seeded-only; allow add/rename for new Godrej BUs.
 - Rich charts on status dashboard (bottleneck per stage).
-- Renomination historical-data side-by-side drawer (currently RENOM flag is exposed throughout but prior-cycle dossier view not yet built).
 - Virus-scan abstraction for uploads.
 
 ### P3
 - SSO-ready auth (OAuth providers).
 - Bulk nominee import (CSV).
 - Document preview inline (PDF renderer).
+- Split `seed.py` into per-domain modules; move GCF + master data to JSON files.
 
 ## Next Actions
 1. Optional re-run of backend testing subagent to validate new role guards on form PUTs.
