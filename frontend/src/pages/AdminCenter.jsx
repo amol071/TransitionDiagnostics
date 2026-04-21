@@ -1,0 +1,116 @@
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import api from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { humanDate } from "@/lib/utils-ldc";
+import { Shield, ArrowLeft, ArrowClockwise } from "@phosphor-icons/react";
+import { toast } from "sonner";
+
+export default function AdminCenter() {
+    const { user, hasRole } = useAuth();
+    const nav = useNavigate();
+    const [users, setUsers] = useState([]);
+    const [caps, setCaps] = useState([]);
+    const [cases, setCases] = useState([]);
+
+    useEffect(() => {
+        if (!hasRole("admin")) nav("/app");
+        Promise.all([
+            api.get("/auth/users").then(r => r.data),
+            api.get("/capabilities").then(r => r.data),
+            api.get("/cases").then(r => r.data),
+        ]).then(([u, cp, c]) => { setUsers(u); setCaps(cp); setCases(c); });
+    }, []);
+
+    const reopen = async (caseId, formType) => {
+        if (!window.confirm(`Reopen ${formType} form? This will allow edits again.`)) return;
+        await api.post(`/cases/${caseId}/reopen`, { form: formType });
+        toast.success("Reopened");
+    };
+
+    return (
+        <div className="min-h-screen bg-[#F8FAFC]">
+            <header className="h-14 bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Link to="/" className="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1"><ArrowLeft size={12} /> Modules</Link>
+                    <div className="mx-3 w-px h-5 bg-slate-200"></div>
+                    <Shield size={18} weight="bold" className="text-amber-600" />
+                    <div className="font-semibold">Admin Center</div>
+                </div>
+                <Link to="/app" className="text-xs text-slate-500 hover:text-slate-900">Open LDC →</Link>
+            </header>
+            <main className="max-w-6xl mx-auto p-4 md:p-8 space-y-6" data-testid="admin-center">
+                <div>
+                    <div className="ldc-label">Governance · Users · Capabilities</div>
+                    <h1 className="text-3xl font-semibold tracking-tight mt-1">Platform administration</h1>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="ldc-panel">
+                        <div className="p-4 border-b border-slate-200 ldc-section-title">Users & roles ({users.length})</div>
+                        <table className="ldc-table w-full">
+                            <thead><tr><th>Name</th><th>Email</th><th>Roles</th></tr></thead>
+                            <tbody>
+                                {users.map(u => (
+                                    <tr key={u.id}>
+                                        <td>{u.name}</td>
+                                        <td className="text-xs text-slate-500">{u.email}</td>
+                                        <td>
+                                            <div className="flex flex-wrap gap-1">
+                                                {u.roles.map(r => <span key={r} className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 border border-slate-200">{r}</span>)}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="ldc-panel">
+                        <div className="p-4 border-b border-slate-200 ldc-section-title">Capability framework ({caps.length})</div>
+                        <table className="ldc-table w-full">
+                            <thead><tr><th>Code</th><th>Name</th><th>Pillar</th><th>Category</th></tr></thead>
+                            <tbody>
+                                {caps.map(c => (
+                                    <tr key={c.id}>
+                                        <td className="font-mono text-xs">{c.code}</td>
+                                        <td>{c.name}</td>
+                                        <td>{c.pillar}</td>
+                                        <td><span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${c.category === "differentiating" ? "bg-amber-50 border border-amber-200 text-amber-800" : "bg-slate-100 border border-slate-200"}`}>{c.category}</span></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div className="ldc-panel">
+                    <div className="p-4 border-b border-slate-200 ldc-section-title">Reopen forms</div>
+                    <table className="ldc-table w-full">
+                        <thead><tr><th>Case</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody>
+                            {cases.map(c => (
+                                <tr key={c.id}>
+                                    <td>
+                                        <div className="font-medium">{c.employee?.name}</div>
+                                        <div className="text-xs text-slate-500">{c.employee?.emp_id} · {c.fiscal_year}</div>
+                                    </td>
+                                    <td className="text-xs">{c.status}</td>
+                                    <td>
+                                        <div className="flex flex-wrap gap-1">
+                                            {["employee", "manager", "panel", "hr"].map(f => (
+                                                <button key={f} onClick={() => reopen(c.id, f)} data-testid={`reopen-${c.id}-${f}`} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border border-slate-300 hover:bg-slate-50">
+                                                    <ArrowClockwise size={10} /> {f}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+        </div>
+    );
+}
