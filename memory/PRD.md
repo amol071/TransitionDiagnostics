@@ -17,6 +17,18 @@ Production-ready internal enterprise web application for a Leadership Developmen
 - **HR / HRBP** (hr.lead@ldc.io) — final summary report with AI drafts.
 - **Stakeholder** (stake.one@ldc.io) — capability-wise feedback.
 
+## What's Implemented (2026-04-21 v4) · Self-reflection Focus + Clear Form
+
+- **Employee self-reflection now shows only 7 core GCFs** (hardcoded in `/app/frontend/src/lib/gcf.js → CORE_GCF_KEYS`):
+  - *Leading Self*: Hunger to Learn and Improve · Emotional and Social Awareness
+  - *Leading Others*: Leading Team · Developing Others · Influencing · Fostering Collaboration
+  - *Leading Business*: Acting Strategically
+- **Optional "Reflections on other GCFs" section** under Overall reflection — lists the 5 non-core GCFs (Initiative · Customer Centricity · Functional Capability · Delivering Results · Institution Building) as checkboxes that reveal a comment textarea. Header copy matches the required text verbatim.
+- **Validation (both frontend toasts and backend 400)**: selected count must be 0 OR 2–3; if opted in, each selected GCF requires a comment. Max 3 enforced via disabled checkboxes.
+- **New model field** `EmployeeForm.other_gcf_comments: List[OtherGcfComment]` (gcf_key, gcf_label, comment). Persisted through `PUT /api/cases/{id}/employee-form`. Backend submit-only validation in `routes_forms.py` returns `400` for invalid counts.
+- **Clear form button on every form** (Employee / Manager / Stakeholder / Panel / HR) via new reusable `/app/frontend/src/components/ClearFormButton.jsx` — two-click confirm pattern (iframe-safe, no `window.confirm`). Resets in-memory state + PUTs empty draft to the server, toasts "Form cleared".
+- **Testing**: 68/68 backend tests PASS (`/app/test_reports/iteration_3.json`, new `/app/backend/tests/test_other_gcf.py`). Frontend validated via Playwright — DOM shows exactly 3 pillars / 7 GCFs, exact header text, clear buttons on all 5 forms.
+
 ## What's Implemented (2026-04-21 v3) · Master Data Ingestion
 - **Master reference tables** — new `master_companies`, `master_functions`, `master_business_units`, `master_levels` Mongo collections.
 - **`/app/backend/master_data.py`** seeds Godrej-aligned reference data: 8 Companies (GCPL, GPL, GAVL, GIL, G&B, GCap, GHF, GFL), 20 Functions, 25 Business Units (scoped per-company via `company_code`/`company_id`), and 9 Levels/Bands (E1–E7 + M1–M4) mapped to LDC L1–L4.

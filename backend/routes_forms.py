@@ -77,6 +77,15 @@ async def get_emp_form(case_id: str, user=Depends(get_current_user)):
 async def save_emp_form(case_id: str, payload: dict, user=Depends(get_current_user)):
     await _guard_employee(case_id, user)
     now = _now()
+    # Validate optional GCF comments count only on submit (draft can have any count — autosave)
+    if payload.get("status") == "submitted":
+        og = payload.get("other_gcf_comments") or []
+        if isinstance(og, list):
+            filled = [o for o in og if isinstance(o, dict) and (o.get("comment") or "").strip()]
+            if 0 < len(filled) < 2:
+                raise HTTPException(400, "Optional reflections: select at least 2 GCFs, or none.")
+            if len(filled) > 3:
+                raise HTTPException(400, "Optional reflections: maximum 3 GCFs allowed.")
     existing = await db.employee_forms.find_one({"case_id": case_id}, {"_id": 0})
     payload["case_id"] = case_id
     payload["updated_at"] = now
