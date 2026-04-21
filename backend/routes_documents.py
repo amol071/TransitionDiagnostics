@@ -139,10 +139,21 @@ async def upload_document(
 
 @router.delete("/cases/{case_id}/documents/{doc_id}")
 async def delete_document(case_id: str, doc_id: str, user=Depends(get_current_user)):
+    doc = await db.documents.find_one({"id": doc_id, "case_id": case_id, "is_deleted": False}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Document not found")
     await db.documents.update_one(
-        {"id": doc_id, "case_id": case_id}, {"$set": {"is_deleted": True}}
+        {"id": doc_id, "case_id": case_id}, {"$set": {"is_deleted": True, "is_latest": False}}
     )
-    await audit(user, "delete", "document", case_id=case_id, details={"doc_id": doc_id})
+    # If we just removed the latest version, promote the previous version of the same doc_type as latest
+    if doc.get("is_latest"):
+        prev = await db.documents.find_one(
+            {"case_id": case_id, "doc_type": doc["doc_type"], "is_deleted": False, "id": {"$ne": doc_id}},
+            {"_id": 0}, sort=[("version", -1)],
+        )
+        if prev:
+            await db.documents.update_one({"id": prev["id"]}, {"$set": {"is_latest": True}})
+    await audit(user, "delete", "document", case_id=case_id, details={"doc_id": doc_id, "doc_type": doc.get("doc_type")})
     return {"ok": True}
 
 
