@@ -6,7 +6,7 @@ import { AIWriteButton, useAutoSave, SaveIndicator } from "@/components/AIHelper
 import { CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-const LEVELS = ["", "Below", "At", "Exceeds"];
+const LEVELS = ["", "Below", "Meets", "Exceeds"];
 
 export default function StakeholderForm() {
     const { caseId } = useParams();

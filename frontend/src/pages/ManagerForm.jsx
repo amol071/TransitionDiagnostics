@@ -7,7 +7,7 @@ import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator } from "@/componen
 import { Plus, Trash, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-const LEVELS = ["", "Below", "At", "Exceeds"];
+const LEVELS = ["", "Below", "Meets", "Exceeds"];
 const READINESS = [
     { v: "", l: "Select…" },
     { v: "strong", l: "Ready — strong" },

@@ -6,6 +6,7 @@ import { humanDate } from "@/lib/utils-ldc";
 import { useAuth } from "@/lib/auth";
 import { Plus, Play, RocketLaunch, MagnifyingGlass } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { Combobox, MultiCombobox } from "@/components/Combobox";
 
 export default function Nominees() {
     const { hasRole } = useAuth();
@@ -182,10 +183,13 @@ function AddNomineeDialog({ onClose, onSaved, employees, users, existing }) {
                 </div>
                 <div className="p-4 space-y-3">
                     <Field label="Employee">
-                        <select value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm" data-testid="add-nom-employee">
-                            {available.length === 0 && <option value="">No available employees</option>}
-                            {available.map((e) => <option key={e.id} value={e.id}>{e.name} ({e.emp_id})</option>)}
-                        </select>
+                        <Combobox
+                            testid="add-nom-employee"
+                            value={form.employee_id}
+                            onChange={(v) => setForm({ ...form, employee_id: v })}
+                            options={available.map((e) => ({ id: e.id, label: `${e.name} (${e.emp_id})`, sub: `${e.bu} · ${e.function} · ${e.level}` }))}
+                            placeholder={available.length === 0 ? "No available employees" : "Search employees…"}
+                        />
                     </Field>
                     <Field label="Fiscal year">
                         <input value={form.fiscal_year} onChange={(e) => setForm({ ...form, fiscal_year: e.target.value })} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm" data-testid="add-nom-fy" />
@@ -195,33 +199,31 @@ function AddNomineeDialog({ onClose, onSaved, employees, users, existing }) {
                         Renomination (use historical data alongside current)
                     </label>
                     <Field label="Manager">
-                        <select value={form.assigned_manager_id} onChange={(e) => setForm({ ...form, assigned_manager_id: e.target.value })} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm">
-                            {mgrs.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                        </select>
+                        <Combobox
+                            testid="add-nom-manager"
+                            value={form.assigned_manager_id}
+                            onChange={(v) => setForm({ ...form, assigned_manager_id: v })}
+                            options={mgrs.map((u) => ({ id: u.id, label: u.name, sub: u.email }))}
+                            placeholder="Search managers…"
+                        />
                     </Field>
                     <Field label="HR / HRBP">
-                        <select value={form.assigned_hr_id} onChange={(e) => setForm({ ...form, assigned_hr_id: e.target.value, assigned_hrbp_id: e.target.value })} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm">
-                            {hrbps.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                        </select>
+                        <Combobox
+                            testid="add-nom-hr"
+                            value={form.assigned_hr_id}
+                            onChange={(v) => setForm({ ...form, assigned_hr_id: v, assigned_hrbp_id: v })}
+                            options={hrbps.map((u) => ({ id: u.id, label: u.name, sub: u.email }))}
+                            placeholder="Search HR…"
+                        />
                     </Field>
-                    <Field label="Panel members">
-                        <div className="space-y-1">
-                            {panels.map((p) => (
-                                <label key={p.id} className="flex items-center gap-2 text-sm">
-                                    <input
-                                        type="checkbox"
-                                        checked={form.assigned_panel_ids.includes(p.id)}
-                                        onChange={(e) => {
-                                            const next = e.target.checked
-                                                ? [...form.assigned_panel_ids, p.id]
-                                                : form.assigned_panel_ids.filter((x) => x !== p.id);
-                                            setForm({ ...form, assigned_panel_ids: next });
-                                        }}
-                                    />
-                                    {p.name}
-                                </label>
-                            ))}
-                        </div>
+                    <Field label="Panel members (multi-select)">
+                        <MultiCombobox
+                            testid="add-nom-panels"
+                            values={form.assigned_panel_ids}
+                            onChange={(arr) => setForm({ ...form, assigned_panel_ids: arr })}
+                            options={panels.map((u) => ({ id: u.id, label: u.name, sub: u.email }))}
+                            placeholder="Type to add panel members…"
+                        />
                     </Field>
                 </div>
                 <div className="p-4 border-t border-slate-200 flex justify-end gap-2">
