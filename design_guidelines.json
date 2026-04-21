@@ -1,0 +1,121 @@
+{
+  "project_name": "LDC AI Platform",
+  "domain": "Enterprise SaaS (Internal HR/Talent Evaluation Workflow)",
+  "theme_strategy": {
+    "theme": "Light",
+    "archetype": "Archetype 4 (Swiss & High-Contrast)",
+    "reasoning": "A serious enterprise tool dealing with dense evaluation data, multi-stakeholder workflows, and sensitive talent decisions requires authority, clarity, and function-first design. We avoid consumer SaaS trends (generic blue, purple AI glows) in favor of high structural contrast and a specialized functional palette."
+  },
+  "typography": {
+    "headings": {
+      "family": "Work Sans",
+      "weights": ["400", "600", "700"],
+      "usage": "Use tight tracking (tracking-tight) for large headings. Never center unless explicitly necessary. Work Sans provides a highly legible, slightly structured aesthetic fitting for HR tools."
+    },
+    "body": {
+      "family": "IBM Plex Sans",
+      "weights": ["400", "500", "600"],
+      "usage": "Used for all dense tables, UI labels, and long-form data. Its technical/monolithic structure excels at side-by-side data comparisons and dense numeric/textual grids."
+    },
+    "scale": {
+      "h1": "text-3xl sm:text-4xl lg:text-5xl tracking-tight font-semibold",
+      "h2": "text-2xl sm:text-3xl font-semibold",
+      "h3": "text-xl sm:text-2xl font-medium",
+      "h4": "text-lg sm:text-xl font-medium",
+      "body": "text-sm md:text-base",
+      "labels": "text-xs font-semibold uppercase tracking-widest text-slate-500"
+    }
+  },
+  "colors": {
+    "background": {
+      "page": "#FFFFFF",
+      "subtle": "#F8FAFC",
+      "panel": "#FFFFFF"
+    },
+    "text": {
+      "primary": "#0F172A",
+      "secondary": "#475569",
+      "muted": "#94A3B8"
+    },
+    "borders": {
+      "default": "#E2E8F0",
+      "focus": "#0F172A"
+    },
+    "brand_primary": {
+      "default": "#0F172A",
+      "hover": "#1E293B",
+      "foreground": "#FFFFFF"
+    },
+    "ai_distinction": {
+      "background": "#FFFBEB",
+      "border": "#FCD34D",
+      "text": "#B45309",
+      "badge_bg": "#FEF3C7",
+      "explanation": "To differentiate from generic AI purple/blue, we use Amber/Ochre. It signals 'insight' and 'illumination'. AI panels must strictly use this subtle tint to separate from human-entered white backgrounds."
+    },
+    "status_system": {
+      "draft": { "bg": "#F1F5F9", "text": "#475569", "border": "#CBD5E1" },
+      "pending_employee": { "bg": "#FEF2F2", "text": "#B91C1C", "border": "#FECACA" },
+      "pending_manager": { "bg": "#FFF7ED", "text": "#C2410C", "border": "#FED7AA" },
+      "under_review": { "bg": "#EFF6FF", "text": "#1D4ED8", "border": "#BFDBFE" },
+      "panel_scheduled": { "bg": "#F5F3FF", "text": "#6D28D9", "border": "#DDD6FE" },
+      "panel_completed": { "bg": "#ECFDF5", "text": "#047857", "border": "#A7F3D0" },
+      "hr_review": { "bg": "#FDF2F8", "text": "#BE185D", "border": "#FBCFE8" },
+      "finalized": { "bg": "#F0FDF4", "text": "#15803D", "border": "#BBF7D0" },
+      "renomination": { "bg": "#FEFCE8", "text": "#A16207", "border": "#FEF08A" },
+      "archived": { "bg": "#E2E8F0", "text": "#334155", "border": "#94A3B8" }
+    }
+  },
+  "layout_and_spacing": {
+    "grid_system": "The Control Room Grid (Mode B). grid-cols-1 md:grid-cols-4. Tight gap-4 to gap-6 for dashboards.",
+    "density": "High density. Use py-2 px-3 for table cells. Prioritize information density without feeling cluttered. Align numbers right, text left.",
+    "alignment": "Strictly left-aligned for dense forms and comparisons. Optical alignment over geometric.",
+    "surfaces": {
+      "cards": "Flat background, 1px subtle border (border-slate-200), NO shadow. On hover, slightly lift (-translate-y-1) and add shadow-sm.",
+      "header": "Solid background (bg-white), hard bottom border (border-slate-200), NO glassmorphism to ensure data privacy and crispness.",
+      "ai_panel": "Subtle amber tinted background, 1px amber border, explicitly labeled 'AI Draft' in the header."
+    },
+    "navigation": "Role-specific vertical sidebar (or dense horizontal top-nav) + breadcrumbs for deep form nesting."
+  },
+  "ui_components": {
+    "icons": {
+      "library": "@phosphor-icons/react",
+      "style": "Use regular or bold weights depending on active state. Provides a crisp, technical feel suitable for dense dashboards."
+    },
+    "tables": {
+      "style": "border-collapse. border-b border-slate-200 on rows. Highlight entire row on hover (bg-slate-50). Use frozen first column for wide horizontal scrolls."
+    },
+    "forms": {
+      "style": "Shadcn based. Tabbed sections for long flows. Sticky summary/status panel on the right sidebar so users always know case context. Use Shadcn select, datepicker, and checkboxes."
+    },
+    "ai_interactions": {
+      "style": "Probabilistic UI. Provide explicit confidence flags (e.g., 'Bias Risk: High'). Always pair AI drafts with an 'Edit/Override' and 'Approve' action. AI content should never overwrite human content without a click."
+    }
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1583338850703-bc602b103674?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTN8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBvZmZpY2UlMjBpbnRlcmlvciUyMGFic3RyYWN0JTIwYXJjaGl0ZWN0dXJlfGVufDB8fHx8MTc3Njc1Mzk2NHww&ixlib=rb-4.1.0&q=85",
+        "category": "Login Background",
+        "description": "Abstract architecture, white and gray concrete building. Use with a bg-white/80 backdrop-blur-sm overlay to keep the login form completely legible."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1610741804272-059e1d3c5dba?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTN8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBvZmZpY2UlMjBpbnRlcmlvciUyMGFic3RyYWN0JTIwYXJjaGl0ZWN0dXJlfGVufDB8fHx8MTc3Njc1Mzk2NHww&ixlib=rb-4.1.0&q=85",
+        "category": "Alternate Login Background",
+        "description": "Black glass walled building. Can be used for dark-mode contextual areas or administrative login."
+      }
+    ],
+    "notes": "Use Phosphor Icons (e.g., Target, Shield, Users, Vault) in place of generated images for the 3 landing page tiles (MDC, LDC, LFP). Style the disabled tiles (MDC, LFP) with opacity-50 and grayscale."
+  },
+  "instructions_to_main_agent": [
+    "Install dependencies: `yarn add @phosphor-icons/react clsx tailwind-merge @radix-ui/react-slot`.",
+    "Implement Shadcn UI for standard components (Tabs, Tables, Cards, Inputs, Dialogs, Select), but aggressively customize them to remove the 'Vercel look'—make them flatter, high-contrast, with 1px solid borders.",
+    "Use Work Sans for all headings and IBM Plex Sans for all body text. Override Tailwind config.",
+    "Landing Page: Create 3 large tiles. 'LDC' is active (brand colors, hover effects), 'MDC' and 'LFP' are explicitly grayed out/disabled. Include an Admin Center tile.",
+    "Build role-based dashboards with clear KPIs, assigned case lists, and AI Quick Case Brief cards.",
+    "Implement the 'Panel Case Review' using a highly dense, side-by-side layout: Document viewer on the left drawer, consolidated table in center, and AI summary form on the right.",
+    "Ensure all AI side panels and AI-drafted text areas strictly use the 'ai_distinction' colors (amber tinted) to visibly separate them from human input.",
+    "Implement the Status Badge system rigorously using the 10 provided states.",
+    "Add 'data-testid' to EVERY interactive element (buttons, tabs, table rows, form inputs) to support enterprise test automation."
+  ]
+}
