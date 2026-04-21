@@ -234,7 +234,7 @@ async def status_matrix(user=Depends(get_current_user)):
 
 # ---------- Audit ----------
 @router.get("/audit")
-async def audit_logs(case_id: Optional[str] = None, user=Depends(get_current_user)):
+async def audit_logs(case_id: Optional[str] = None, user=Depends(require_roles("admin", "coordinator", "hr", "hrbp"))):
     q = {}
     if case_id:
         q["case_id"] = case_id

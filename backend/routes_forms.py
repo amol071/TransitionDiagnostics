@@ -12,6 +12,56 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
+async def _require_case(case_id: str):
+    c = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Case not found")
+    return c
+
+
+def _is_admin(user):
+    return any(r in user["roles"] for r in ["admin", "coordinator"])
+
+
+async def _guard_employee(case_id: str, user: dict):
+    c = await _require_case(case_id)
+    if _is_admin(user):
+        return c
+    if "employee" not in user["roles"]:
+        raise HTTPException(403, "Only employee or admin can edit employee form")
+    emp = await db.employees.find_one({"id": c["employee_id"]}, {"_id": 0})
+    if not emp or emp.get("email", "").lower() != user["email"].lower():
+        raise HTTPException(403, "Not your case")
+    return c
+
+
+async def _guard_manager(case_id: str, user: dict):
+    c = await _require_case(case_id)
+    if _is_admin(user):
+        return c
+    if "manager" not in user["roles"] or c.get("assigned_manager_id") != user["id"]:
+        raise HTTPException(403, "Only the assigned manager or admin can edit manager form")
+    return c
+
+
+async def _guard_panel(case_id: str, user: dict):
+    c = await _require_case(case_id)
+    if _is_admin(user):
+        return c
+    if "panel" not in user["roles"] or user["id"] not in c.get("assigned_panel_ids", []):
+        raise HTTPException(403, "Only assigned panel members can edit panel review")
+    return c
+
+
+async def _guard_hr(case_id: str, user: dict):
+    c = await _require_case(case_id)
+    if _is_admin(user):
+        return c
+    if not any(r in user["roles"] for r in ["hr", "hrbp"]):
+        raise HTTPException(403, "Only HR/HRBP can edit HR review")
+    return c
+
+
 # ---------- Employee Form ----------
 @router.get("/cases/{case_id}/employee-form")
 async def get_emp_form(case_id: str, user=Depends(get_current_user)):
@@ -24,6 +74,7 @@ async def get_emp_form(case_id: str, user=Depends(get_current_user)):
 
 @router.put("/cases/{case_id}/employee-form")
 async def save_emp_form(case_id: str, payload: dict, user=Depends(get_current_user)):
+    await _guard_employee(case_id, user)
     now = _now()
     existing = await db.employee_forms.find_one({"case_id": case_id}, {"_id": 0})
     payload["case_id"] = case_id
@@ -150,6 +201,7 @@ async def my_panel_review(case_id: str, user=Depends(get_current_user)):
 
 @router.put("/cases/{case_id}/panel-review/mine")
 async def save_panel_review(case_id: str, payload: dict, user=Depends(get_current_user)):
+    await _guard_panel(case_id, user)
     now = _now()
     payload["case_id"] = case_id
     payload["panel_member_id"] = user["id"]
@@ -200,6 +252,7 @@ async def get_hr_review(case_id: str, user=Depends(get_current_user)):
 
 @router.put("/cases/{case_id}/hr-review")
 async def save_hr_review(case_id: str, payload: dict, user=Depends(get_current_user)):
+    await _guard_hr(case_id, user)
     now = _now()
     existing = await db.hr_reviews.find_one({"case_id": case_id}, {"_id": 0})
     payload["case_id"] = case_id
