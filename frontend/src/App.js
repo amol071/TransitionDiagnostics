@@ -32,7 +32,7 @@ function App() {
             <BrowserRouter>
                 <Toaster richColors position="top-right" />
                 <Routes>
-                    <Route path="/" element={<Landing />} />
+                    <Route path="/" element={<Protected><Landing /></Protected>} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/admin" element={<Protected><AdminCenter /></Protected>} />
                     <Route path="/app" element={<Protected><AppLayout /></Protected>}>

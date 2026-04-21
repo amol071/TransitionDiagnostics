@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from core import db, get_current_user, require_roles, audit
 from models import NomineeCaseCreate, LaunchBody
+from notifications import notify, recipients_for_case
 
 
 router = APIRouter(tags=["cases"])
@@ -113,6 +114,33 @@ async def get_case(case_id: str, user=Depends(get_current_user)):
     return c
 
 
+@router.get("/cases/{case_id}/prior")
+async def prior_cycle(case_id: str, user=Depends(get_current_user)):
+    """Return prior-cycle case + forms for a renomination. Looks up previous case for same employee."""
+    c = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Case not found")
+    prior = await db.cases.find_one(
+        {"employee_id": c["employee_id"], "id": {"$ne": case_id}, "created_at": {"$lt": c["created_at"]}},
+        {"_id": 0}, sort=[("created_at", -1)]
+    )
+    if not prior:
+        return {"prior": None}
+    emp_form = await db.employee_forms.find_one({"case_id": prior["id"]}, {"_id": 0})
+    mgr_form = await db.manager_forms.find_one({"case_id": prior["id"]}, {"_id": 0})
+    hr = await db.hr_reviews.find_one({"case_id": prior["id"]}, {"_id": 0})
+    panel = await db.panel_reviews.find({"case_id": prior["id"]}, {"_id": 0}).to_list(20)
+    caps = await db.capabilities.find({}, {"_id": 0}).to_list(200)
+    return {
+        "prior": prior,
+        "employee_form": emp_form,
+        "manager_form": mgr_form,
+        "hr_review": hr,
+        "panel_reviews": panel,
+        "capabilities": caps,
+    }
+
+
 @router.patch("/cases/{case_id}")
 async def update_case(case_id: str, payload: dict, user=Depends(require_roles("admin", "coordinator"))):
     payload["updated_at"] = _now()
@@ -124,6 +152,9 @@ async def update_case(case_id: str, payload: dict, user=Depends(require_roles("a
 
 @router.post("/cases/{case_id}/launch")
 async def launch_case(case_id: str, body: LaunchBody, user=Depends(require_roles("admin", "coordinator"))):
+    c = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Case not found")
     update = {"updated_at": _now()}
     if body.stage == "case":
         update.update({"is_launched": True, "status": "employee_in_progress"})
@@ -132,31 +163,55 @@ async def launch_case(case_id: str, body: LaunchBody, user=Depends(require_roles
     await db.cases.update_one({"id": case_id}, {"$set": update})
     await audit(user, f"launch_{body.stage}", "case", case_id=case_id)
     c = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    emp = await db.employees.find_one({"id": c["employee_id"]}, {"_id": 0}) or {}
+    if body.stage == "case":
+        ids = await recipients_for_case(c, ["employee", "manager"])
+        await notify(ids, "case_launched", f"LDC launched for {emp.get('name','')}",
+                     f"The LDC case for {emp.get('name','')} ({c['fiscal_year']}) has been launched. Please complete your form.",
+                     case_id=case_id)
+    elif body.stage == "panel":
+        ids = await recipients_for_case(c, ["panel", "hr", "hrbp"])
+        await notify(ids, "panel_launched", f"Panel launched · {emp.get('name','')}",
+                     f"Panel review is now open for {emp.get('name','')}.",
+                     case_id=case_id)
     return c
 
 
 @router.post("/cases/{case_id}/reopen")
 async def reopen_case(case_id: str, payload: dict, user=Depends(require_roles("admin", "coordinator"))):
     """Reopen a form. payload={form: employee|manager|panel|hr}"""
+    c = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Case not found")
     form = payload.get("form")
     now = _now()
+    notify_roles: list = []
     if form == "employee":
         await db.employee_forms.update_many({"case_id": case_id}, {"$set": {"status": "draft", "updated_at": now}})
         await db.cases.update_one({"id": case_id}, {"$set": {"status": "employee_in_progress", "updated_at": now}})
+        notify_roles = ["employee"]
     elif form == "manager":
         await db.manager_forms.update_many({"case_id": case_id}, {"$set": {"status": "draft", "updated_at": now}})
         await db.cases.update_one({"id": case_id}, {"$set": {"status": "manager_in_progress", "updated_at": now}})
+        notify_roles = ["manager"]
     elif form == "panel":
         await db.panel_reviews.update_many({"case_id": case_id}, {"$set": {"status": "draft", "updated_at": now}})
         await db.cases.update_one({"id": case_id}, {"$set": {"status": "panel_in_progress", "updated_at": now}})
+        notify_roles = ["panel"]
     elif form == "hr":
         await db.hr_reviews.update_many({"case_id": case_id}, {"$set": {"status": "draft", "updated_at": now}})
         await db.cases.update_one({"id": case_id}, {"$set": {"status": "hr_in_progress", "updated_at": now}})
+        notify_roles = ["hr", "hrbp"]
     else:
         raise HTTPException(400, "form must be one of employee|manager|panel|hr")
     await audit(user, "reopen", form, case_id=case_id, details=payload)
-    c = await db.cases.find_one({"id": case_id}, {"_id": 0})
-    return c
+    c2 = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    emp = await db.employees.find_one({"id": c2["employee_id"]}, {"_id": 0}) or {}
+    ids = await recipients_for_case(c2, notify_roles)
+    await notify(ids, "form_reopened", f"{form.title()} form reopened · {emp.get('name','')}",
+                 f"Your {form} form for {emp.get('name','')} has been reopened by {user['name']}.",
+                 case_id=case_id)
+    return c2
 
 
 # ---------- Dashboard / Status ----------

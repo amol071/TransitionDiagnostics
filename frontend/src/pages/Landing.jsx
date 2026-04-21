@@ -1,7 +1,8 @@
 import React from "react";
-import { Link } from "react-router-dom";
-import { Target, Shield, ChartBar, MegaphoneSimple, ArrowRight, LockSimple } from "@phosphor-icons/react";
+import { Link, useNavigate } from "react-router-dom";
+import { Target, Shield, ChartBar, MegaphoneSimple, ArrowRight, LockSimple, SignOut, UserCircle } from "@phosphor-icons/react";
 import { useAuth } from "@/lib/auth";
+import { currentFY } from "@/lib/utils-ldc";
 
 const TILES = [
     {
@@ -31,7 +32,10 @@ const TILES = [
 ];
 
 export default function Landing() {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
+    const nav = useNavigate();
+    const fy = currentFY();
+
     return (
         <div className="min-h-screen bg-[#F8FAFC]">
             <header className="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between">
@@ -39,20 +43,34 @@ export default function Landing() {
                     <div className="w-7 h-7 rounded bg-slate-900 text-white grid place-items-center">
                         <Target size={16} weight="bold" />
                     </div>
-                    <div className="font-semibold">NovaCorp Talent Platform</div>
+                    <div className="font-semibold" data-testid="app-brand">Transition Diagnostics</div>
                 </div>
                 <div className="flex items-center gap-3">
-                    {user ? (
-                        <Link to="/app" className="text-sm text-slate-700 hover:text-slate-900" data-testid="landing-app-link">Open app →</Link>
-                    ) : (
-                        <Link to="/login" className="text-sm font-medium text-slate-900 hover:underline" data-testid="landing-signin">Sign in</Link>
+                    {user && (
+                        <>
+                            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500">
+                                <UserCircle size={16} className="text-slate-400" />
+                                <span className="text-slate-700 font-medium">{user.name}</span>
+                                <span className="text-slate-400">·</span>
+                                <span>{user.roles.join(" · ")}</span>
+                            </div>
+                            <button
+                                data-testid="landing-signout"
+                                onClick={() => { logout(); nav("/login"); }}
+                                className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
+                            >
+                                <SignOut size={12} /> Sign out
+                            </button>
+                        </>
                     )}
                 </div>
             </header>
 
             <main className="max-w-6xl mx-auto px-6 py-16">
                 <div className="max-w-2xl mb-16 animate-fade-in">
-                    <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Talent Suite</div>
+                    <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3" data-testid="landing-fy">
+                        Transition Diagnostics ({fy})
+                    </div>
                     <h1 className="text-4xl md:text-5xl font-semibold text-slate-900 tracking-tight leading-tight">
                         One platform for leadership, readiness and structured talent decisions.
                     </h1>
@@ -99,7 +117,7 @@ export default function Landing() {
                             );
                             if (t.disabled) return <div key={t.id}>{content}</div>;
                             return (
-                                <Link to={user ? "/app" : "/login"} key={t.id}>
+                                <Link to="/app" key={t.id}>
                                     {content}
                                 </Link>
                             );
@@ -107,32 +125,34 @@ export default function Landing() {
                     </div>
                 </section>
 
-                <section className="mt-12">
-                    <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">Administration</div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Link to={user ? "/admin" : "/login"} data-testid="tile-admin">
-                            <div className="ldc-panel p-6 h-full hover:-translate-y-1 hover:shadow-sm hover:border-slate-400 transition-all cursor-pointer">
-                                <div className="flex items-center justify-between mb-6">
-                                    <div className="w-10 h-10 rounded bg-amber-500 text-white grid place-items-center">
-                                        <Shield size={22} weight="bold" />
+                {user?.roles?.includes("admin") && (
+                    <section className="mt-12">
+                        <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">Administration</div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Link to="/admin" data-testid="tile-admin">
+                                <div className="ldc-panel p-6 h-full hover:-translate-y-1 hover:shadow-sm hover:border-slate-400 transition-all cursor-pointer">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <div className="w-10 h-10 rounded bg-amber-500 text-white grid place-items-center">
+                                            <Shield size={22} weight="bold" />
+                                        </div>
+                                        <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded">Admin only</span>
                                     </div>
-                                    <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded">Admin only</span>
+                                    <div className="text-2xl font-semibold tracking-tight text-slate-900">Admin Center</div>
+                                    <div className="text-sm font-medium text-slate-500 mt-1">Users · Roles · Capabilities</div>
+                                    <p className="mt-4 text-sm text-slate-600">
+                                        Manage users, assign roles, seed capabilities, and monitor audit history across all modules.
+                                    </p>
+                                    <div className="mt-6 flex items-center gap-1 text-sm font-semibold text-slate-900">
+                                        Enter Admin <ArrowRight size={14} weight="bold" />
+                                    </div>
                                 </div>
-                                <div className="text-2xl font-semibold tracking-tight text-slate-900">Admin Center</div>
-                                <div className="text-sm font-medium text-slate-500 mt-1">Users · Roles · Capabilities</div>
-                                <p className="mt-4 text-sm text-slate-600">
-                                    Manage users, assign roles, seed capabilities, and monitor audit history across all modules.
-                                </p>
-                                <div className="mt-6 flex items-center gap-1 text-sm font-semibold text-slate-900">
-                                    Enter Admin <ArrowRight size={14} weight="bold" />
-                                </div>
-                            </div>
-                        </Link>
-                    </div>
-                </section>
+                            </Link>
+                        </div>
+                    </section>
+                )}
             </main>
             <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-500">
-                © NovaCorp Talent Platform · Internal use only
+                © NovaCorp Talent Platform · {fy} · Internal use only
             </footer>
         </div>
     );

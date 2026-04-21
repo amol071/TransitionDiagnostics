@@ -2,6 +2,26 @@ export function cn(...args) {
     return args.filter(Boolean).join(" ");
 }
 
+export function currentFY() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth() + 1;
+    const startYear = m >= 4 ? y : y - 1;
+    return `FY ${startYear}-${startYear + 1}`;
+}
+
+export function formatFY(code) {
+    // "FY26" → "FY 2025-2026"
+    if (!code) return currentFY();
+    const m = String(code).match(/(\d{2,4})/);
+    if (!m) return code;
+    let end = parseInt(m[1], 10);
+    if (end < 100) end = 2000 + end;
+    return `FY ${end - 1}-${end}`;
+}
+
+export const APP_NAME = "Transition Diagnostics";
+
 export const STATUS_COLORS = {
     draft: { bg: "#F1F5F9", text: "#475569", border: "#CBD5E1", label: "Draft" },
     launched: { bg: "#EFF6FF", text: "#1D4ED8", border: "#BFDBFE", label: "Launched" },

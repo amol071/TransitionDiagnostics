@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 import uuid
 from core import db, get_current_user, audit
+from notifications import notify, recipients_for_case
 
 router = APIRouter(tags=["forms"])
 
@@ -95,6 +96,12 @@ async def save_emp_form(case_id: str, payload: dict, user=Depends(get_current_us
         await db.employee_forms.update_one({"case_id": case_id}, {"$set": {"submitted_at": now}})
         await db.cases.update_one({"id": case_id}, {"$set": {"status": "employee_submitted", "updated_at": now}})
         await audit(user, "submit", "employee_form", case_id=case_id)
+        c = await db.cases.find_one({"id": case_id}, {"_id": 0})
+        emp = await db.employees.find_one({"id": c["employee_id"]}, {"_id": 0}) or {}
+        ids = await recipients_for_case(c, ["manager", "coordinator"])
+        await notify(ids, "employee_submitted", f"Self-reflection submitted · {emp.get('name','')}",
+                     f"{emp.get('name','')} has submitted their self-reflection. Manager review is now pending.",
+                     case_id=case_id)
     else:
         await audit(user, "save", "employee_form", case_id=case_id)
     return updated
@@ -128,6 +135,12 @@ async def save_mgr_form(case_id: str, payload: dict, user=Depends(get_current_us
         await db.manager_forms.update_one({"case_id": case_id}, {"$set": {"submitted_at": now}})
         await db.cases.update_one({"id": case_id}, {"$set": {"status": "manager_submitted", "updated_at": now}})
         await audit(user, "submit", "manager_form", case_id=case_id)
+        c = await db.cases.find_one({"id": case_id}, {"_id": 0})
+        emp = await db.employees.find_one({"id": c["employee_id"]}, {"_id": 0}) or {}
+        ids = await recipients_for_case(c, ["coordinator", "hr", "hrbp"])
+        await notify(ids, "manager_submitted", f"Manager review submitted · {emp.get('name','')}",
+                     f"Manager review for {emp.get('name','')} is complete. Ready for panel launch.",
+                     case_id=case_id)
     else:
         await audit(user, "save", "manager_form", case_id=case_id)
     return await db.manager_forms.find_one({"case_id": case_id}, {"_id": 0})
@@ -269,4 +282,10 @@ async def save_hr_review(case_id: str, payload: dict, user=Depends(get_current_u
         await db.hr_reviews.update_one({"case_id": case_id}, {"$set": {"submitted_at": now}})
         await db.cases.update_one({"id": case_id}, {"$set": {"status": "closed", "updated_at": now}})
         await audit(user, "submit", "hr_review", case_id=case_id)
+        c2 = await db.cases.find_one({"id": case_id}, {"_id": 0})
+        emp = await db.employees.find_one({"id": c2["employee_id"]}, {"_id": 0}) or {}
+        ids = await recipients_for_case(c2, ["employee", "manager", "coordinator"])
+        await notify(ids, "hr_finalized", f"Final summary ready · {emp.get('name','')}",
+                     f"HR has finalized the LDC summary for {emp.get('name','')}. Case is now closed.",
+                     case_id=case_id)
     return await db.hr_reviews.find_one({"case_id": case_id}, {"_id": 0})

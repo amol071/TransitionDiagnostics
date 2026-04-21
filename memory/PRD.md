@@ -17,7 +17,30 @@ Production-ready internal enterprise web application for a Leadership Developmen
 - **HR / HRBP** (hr.lead@ldc.io) — final summary report with AI drafts.
 - **Stakeholder** (stake.one@ldc.io) — capability-wise feedback.
 
-## What's Implemented (2026-04-21)
+## What's Implemented (2026-04-21 v2)
+
+### Product rename & gated entry
+- App renamed to **Transition Diagnostics**; landing header shows dynamic `(FY YYYY-YYYY)` derived from current date (fiscal year starts April).
+- Landing page is **protected** — unauthenticated users visiting `/` are redirected to `/login`. After login, users land on `/` with module tiles (MDC disabled · **LDC live** · LFP disabled) plus Admin Center (admin-only).
+- Sign-out control on landing header.
+
+### Document auto-summary on upload
+- `pypdf` added; text extracted from PDFs and text files on upload (stored in `documents.parsed_text`).
+- FastAPI `BackgroundTasks` runs `ai_document_summary` (Claude Sonnet 4.5) and stores an `AIAnalysis` of type `document_summary` linked to the case + doc_id.
+
+### Notifications (in-app + mocked email)
+- `notifications` and `email_outbox` Mongo collections.
+- `notify(user_ids, type, title, body, case_id)` helper + `recipients_for_case(roles)` mapper.
+- Triggered on: case launched, panel launched, employee_submitted, manager_submitted, panel_submitted (all panels done), hr_finalized, form_reopened.
+- Frontend `NotificationBell` in app header (unread badge, dropdown, mark-all-read, click routes to case).
+- Email delivery is MOCKED (written to `email_outbox` with provider=`MOCKED`). To enable real email delivery, integrate Resend/SendGrid/Twilio.
+
+### Renomination prior-cycle dossier
+- Bob Sharma seeded with a prior FY25 case (`status: closed`) with historical manager form, panel reviews, and HR summary containing readiness, strengths, development areas, and a development plan.
+- New endpoint `GET /api/cases/{id}/prior` returns prior case + emp/mgr/panel/hr forms.
+- On `CaseDetail` for renomination cases, a **Prior cycle · FY25** panel renders side-by-side prior HR readiness + manager readiness + prior strengths/development areas + prior panel capability ratings + prior development plan.
+
+## Prior state (2026-04-21 v1)
 ### Core workflow
 - Landing page + Admin Center gate + JWT auth w/ 10 seeded users.
 - Role-based dashboards (KPIs, my-cases list, AI Case Brief).

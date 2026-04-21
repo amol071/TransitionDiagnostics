@@ -1,10 +1,13 @@
 """Document upload / list / download routes using Emergent object storage."""
 import uuid
+import io
+import asyncio
 import logging
 from datetime import datetime, timezone
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Header, Query, Response
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Header, Query, Response, BackgroundTasks
 from typing import Optional
 from core import db, get_current_user, put_object, get_object, APP_NAME, audit
+from ai_service import ai_document_summary, MODEL_NAME
 
 logger = logging.getLogger("ldc.docs")
 router = APIRouter(tags=["documents"])
@@ -16,6 +19,47 @@ ALLOWED_DOC_TYPES = {
 }
 
 MAX_SIZE = 25 * 1024 * 1024  # 25 MB
+
+
+def _extract_text(data: bytes, content_type: str) -> Optional[str]:
+    """Best-effort text extraction for PDFs and plain text files."""
+    try:
+        if content_type and content_type.startswith("text/"):
+            return data.decode("utf-8", errors="replace")[:40000]
+        if content_type == "application/pdf" or (len(data) >= 5 and data[:5] == b"%PDF-"):
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(data))
+            chunks = []
+            for p in reader.pages[:60]:
+                try:
+                    chunks.append(p.extract_text() or "")
+                except Exception:
+                    continue
+            text = "\n".join(chunks).strip()
+            return text[:40000] if text else None
+    except Exception as e:
+        logger.warning(f"text extract failed: {e}")
+    return None
+
+
+async def _summarize_and_store(doc_id: str, case_id: str, doc_type: str, text: str, user_id: str):
+    try:
+        structured = await ai_document_summary(doc_type, text)
+        await db.ai_analyses.insert_one({
+            "id": str(uuid.uuid4()),
+            "case_id": case_id,
+            "analysis_type": "document_summary",
+            "prompt_version": "v1",
+            "model_name": MODEL_NAME,
+            "content": "",
+            "structured": {**structured, "doc_id": doc_id, "doc_type": doc_type},
+            "created_by": user_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await db.documents.update_one({"id": doc_id}, {"$set": {"ai_summary_ready": True}})
+        logger.info(f"AI summary stored for doc {doc_id} ({doc_type})")
+    except Exception as e:
+        logger.exception(f"AI summary failed for doc {doc_id}: {e}")
 
 
 @router.get("/cases/{case_id}/documents")
@@ -36,6 +80,7 @@ async def list_documents(case_id: str, user=Depends(get_current_user)):
 @router.post("/cases/{case_id}/documents")
 async def upload_document(
     case_id: str,
+    background_tasks: BackgroundTasks,
     doc_type: str = Form(...),
     file: UploadFile = File(...),
     user=Depends(get_current_user),
@@ -60,6 +105,10 @@ async def upload_document(
     )
     # Determine next version
     prev_count = await db.documents.count_documents({"case_id": case_id, "doc_type": doc_type})
+
+    # Parse text (best-effort)
+    parsed = _extract_text(data, content_type)
+
     doc = {
         "id": str(uuid.uuid4()),
         "case_id": case_id,
@@ -74,10 +123,17 @@ async def upload_document(
         "uploaded_by_name": user["name"],
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "is_deleted": False,
+        "parsed_text": parsed,
+        "ai_summary_ready": False,
     }
     await db.documents.insert_one(doc)
     doc.pop("_id", None)
     await audit(user, "upload", "document", case_id=case_id, details={"doc_type": doc_type, "filename": file.filename})
+
+    # Auto AI summary (background, fire-and-forget)
+    if parsed and len(parsed.strip()) > 100:
+        background_tasks.add_task(_summarize_and_store, doc["id"], case_id, doc_type, parsed, user["id"])
+
     return doc
 
 

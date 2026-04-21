@@ -8,7 +8,7 @@ import { CaseAIBar, AI_LABELS } from "@/components/AIHelpers";
 import { humanDate, DOC_TYPE_LABELS } from "@/lib/utils-ldc";
 import {
     PencilSimple, Users, FolderOpen, ChartBar, ClipboardText,
-    CaretRight, Target,
+    CaretRight, Target, ClockCounterClockwise,
 } from "@phosphor-icons/react";
 
 export default function CaseDetail() {
@@ -18,6 +18,7 @@ export default function CaseDetail() {
     const [c, setC] = useState(null);
     const [docs, setDocs] = useState([]);
     const [analyses, setAnalyses] = useState({});
+    const [prior, setPrior] = useState(null);
     const [loading, setLoading] = useState(true);
 
     const reload = async () => {
@@ -27,6 +28,12 @@ export default function CaseDetail() {
             api.get(`/ai/case/${caseId}/latest`).then(r => r.data),
         ]);
         setC(cd); setDocs(dd.documents); setAnalyses(ai);
+        if (cd.is_renomination) {
+            try {
+                const { data } = await api.get(`/cases/${caseId}/prior`);
+                setPrior(data);
+            } catch { /* no prior */ }
+        }
         setLoading(false);
     };
     useEffect(() => { reload(); }, [caseId]);
@@ -71,6 +78,7 @@ export default function CaseDetail() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="lg:col-span-2 space-y-4">
+                    {c.is_renomination && <PriorCyclePanel prior={prior} />}
                     <div className="ldc-panel">
                         <div className="p-4 border-b border-slate-200 ldc-section-title">Workflow shortcuts</div>
                         <div className="p-2">
@@ -157,3 +165,102 @@ function Bullets({ title, items }) {
         </div>
     );
 }
+
+function PriorCyclePanel({ prior }) {
+    if (!prior) {
+        return (
+            <div className="ldc-panel p-4 text-sm text-slate-500 border-amber-200 bg-amber-50/30">
+                <div className="ldc-label text-amber-800 mb-1 flex items-center gap-1"><ClockCounterClockwise size={12} /> Renomination dossier</div>
+                Loading prior-cycle data…
+            </div>
+        );
+    }
+    if (!prior.prior) {
+        return (
+            <div className="ldc-panel p-4 text-sm text-slate-500 border-amber-200 bg-amber-50/30">
+                <div className="ldc-label text-amber-800 mb-1 flex items-center gap-1"><ClockCounterClockwise size={12} /> Renomination dossier</div>
+                No prior-cycle case on record for this employee.
+            </div>
+        );
+    }
+    const p = prior.prior;
+    const hr = prior.hr_review;
+    const mgr = prior.manager_form;
+    const panel = prior.panel_reviews || [];
+    const caps = prior.capabilities || [];
+    return (
+        <div className="ldc-panel border-amber-200" data-testid="prior-cycle-panel">
+            <div className="p-4 border-b border-amber-200 bg-amber-50/50 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                    <ClockCounterClockwise size={16} weight="bold" className="text-amber-700" />
+                    <div>
+                        <div className="ldc-label text-amber-800">Prior cycle · {p.fiscal_year}</div>
+                        <div className="text-sm font-semibold text-slate-900">Historical dossier — referenced for renomination</div>
+                    </div>
+                </div>
+                <StatusBadge status={p.status} />
+            </div>
+            <div className="p-4 grid md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <div className="ldc-label mb-1">Prior HR final readiness</div>
+                    <div className="font-semibold text-slate-900">{hr?.readiness ? hr.readiness.toUpperCase() : "—"}</div>
+                    {hr?.overall_summary && <p className="text-slate-600 mt-2 whitespace-pre-line">{hr.overall_summary}</p>}
+                </div>
+                <div>
+                    <div className="ldc-label mb-1">Prior manager readiness</div>
+                    <div className="font-semibold text-slate-900">{mgr?.readiness ? mgr.readiness.toUpperCase() : "—"}</div>
+                    {mgr?.overall_rationale && <p className="text-slate-600 mt-2 whitespace-pre-line">{mgr.overall_rationale}</p>}
+                </div>
+            </div>
+            {hr && (hr.strengths?.length > 0 || hr.improvements?.length > 0) && (
+                <div className="p-4 border-t border-amber-100 grid md:grid-cols-2 gap-4 text-sm">
+                    {hr.strengths?.length > 0 && (
+                        <div>
+                            <div className="ldc-label mb-1">Prior strengths</div>
+                            <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
+                                {hr.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                            </ul>
+                        </div>
+                    )}
+                    {hr.improvements?.length > 0 && (
+                        <div>
+                            <div className="ldc-label mb-1">Prior development areas</div>
+                            <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
+                                {hr.improvements.map((s, i) => <li key={i}>{s}</li>)}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
+            {panel.length > 0 && caps.length > 0 && (
+                <div className="p-4 border-t border-amber-100">
+                    <div className="ldc-label mb-2">Prior panel capability ratings</div>
+                    <table className="ldc-table w-full">
+                        <thead><tr><th>Capability</th><th>Rating</th><th>Rationale</th></tr></thead>
+                        <tbody>
+                            {caps.map(cap => {
+                                // take first panel review's rating for each capability (they were aligned)
+                                const r = panel[0]?.capability_ratings?.find(x => x.capability_id === cap.id);
+                                if (!r || !r.rating) return null;
+                                return (
+                                    <tr key={cap.id}>
+                                        <td>{cap.name}<span className="text-[11px] text-slate-400 ml-1">· {cap.category}</span></td>
+                                        <td><span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs font-semibold">{r.rating}</span></td>
+                                        <td className="text-xs text-slate-600">{r.rationale}</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+            {hr?.development_plan && (
+                <div className="p-4 border-t border-amber-100">
+                    <div className="ldc-label mb-1">Prior development plan</div>
+                    <p className="text-sm text-slate-700 whitespace-pre-line">{hr.development_plan}</p>
+                </div>
+            )}
+        </div>
+    );
+}
+

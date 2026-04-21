@@ -235,6 +235,63 @@ async def seed_all():
     }
     await db.employee_forms.insert_one(bob_emp_form)
 
+    # ---- Prior-cycle Bob case (for renomination comparison) ----
+    prior_now = datetime.now(timezone.utc).replace(year=datetime.now(timezone.utc).year - 1).isoformat()
+    case_bob_prior = {
+        "id": str(uuid.uuid4()), "employee_id": bob_emp["id"], "fiscal_year": "FY25",
+        "is_renomination": False, "is_launched": True, "is_panel_launched": True,
+        "status": "closed",
+        "assigned_manager_id": user_ids["mary.mgr@ldc.io"],
+        "assigned_panel_ids": panel_ids,
+        "assigned_hrbp_id": user_ids["hr.lead@ldc.io"],
+        "assigned_hr_id": user_ids["hr.lead@ldc.io"],
+        "coordinator_id": user_ids["admin@ldc.io"],
+        "created_at": prior_now, "updated_at": prior_now,
+    }
+    await db.cases.insert_one(case_bob_prior)
+
+    # prior manager form
+    await db.manager_forms.insert_one({
+        "id": str(uuid.uuid4()), "case_id": case_bob_prior["id"],
+        "capability_responses": [
+            {"capability_id": cap_docs["STR-1"]["id"], "current_level": "At",
+             "demonstrated_next": False, "rationale": "Brand operator — limited cross-BU framing."},
+            {"capability_id": cap_docs["BUS-2"]["id"], "current_level": "At",
+             "demonstrated_next": True, "rationale": "Customer intimacy demonstrated."},
+        ],
+        "stakeholders": [],
+        "overall_rationale": "Bob operates reliably within own line but needs broader strategic framing and cross-BU influence before readiness.",
+        "readiness": "weak",
+        "status": "submitted", "submitted_at": prior_now, "updated_at": prior_now,
+    })
+    # prior panel reviews
+    for pm in panel_ids:
+        await db.panel_reviews.insert_one({
+            "id": str(uuid.uuid4()), "case_id": case_bob_prior["id"], "panel_member_id": pm,
+            "capability_ratings": [
+                {"capability_id": cap_docs["STR-1"]["id"], "rating": "Moderate", "rationale": "Needs stronger multi-year framing"},
+                {"capability_id": cap_docs["BUS-2"]["id"], "rating": "Strong", "rationale": "Customer-first is a clear strength"},
+            ],
+            "overall_rating": "weak",
+            "overall_rationale": "Not yet ready. Strategic breadth and cross-BU influence are development areas. Retest in 12 months with evidence of platform-level thinking.",
+            "discussion_notes": "",
+            "status": "submitted", "submitted_at": prior_now, "updated_at": prior_now,
+        })
+    # prior HR
+    await db.hr_reviews.insert_one({
+        "id": str(uuid.uuid4()), "case_id": case_bob_prior["id"],
+        "strengths": ["Customer-first mindset consistently demonstrated across product launches",
+                      "Reliable execution within own brand portfolio"],
+        "improvements": ["Strategic framing beyond own brand — articulate multi-year thesis",
+                         "Cross-BU influence and stakeholder alignment",
+                         "Coaching and developing future leaders"],
+        "overall_summary": "Bob is a dependable brand operator with strong customer intuition. Development is needed in strategic breadth and cross-BU influence before next-level readiness. We recommend reassessing in 12 months with concrete evidence of multi-year portfolio thinking.",
+        "additional_feedback": "Encourage shadowing cross-BU planning cycles.",
+        "development_plan": "1) Lead a cross-BU initiative within 6 months. 2) Present a 3-year portfolio thesis to leadership. 3) Mentor two L1 leaders.",
+        "readiness": "weak",
+        "status": "submitted", "submitted_at": prior_now, "updated_at": prior_now,
+    })
+
     # ---- Audit seed ----
     await db.audit_logs.insert_one({
         "id": str(uuid.uuid4()), "case_id": case_alice["id"],

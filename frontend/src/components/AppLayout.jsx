@@ -5,6 +5,7 @@ import {
     Shield, SignOut, Target, List as ListIcon, X, FolderOpen,
 } from "@phosphor-icons/react";
 import { useAuth } from "@/lib/auth";
+import NotificationBell from "@/components/NotificationBell";
 
 const NAV = [
     { to: "/app", label: "Dashboard", icon: House, roles: ["admin","coordinator","employee","manager","panel","hr","hrbp","stakeholder"] },
@@ -40,8 +41,8 @@ export default function AppLayout() {
                             <Target size={16} weight="bold" />
                         </div>
                         <div>
-                            <div className="font-semibold text-slate-900 leading-tight">LDC AI</div>
-                            <div className="text-[10px] uppercase tracking-widest text-slate-500">Leadership Dev Center</div>
+                            <div className="font-semibold text-slate-900 leading-tight">Transition Diagnostics</div>
+                            <div className="text-[10px] uppercase tracking-widest text-slate-500">Leadership Development Center</div>
                         </div>
                     </Link>
                 </div>
@@ -112,6 +113,7 @@ export default function AppLayout() {
                     </div>
                     <div className="flex items-center gap-2">
                         <Link to="/" className="text-xs text-slate-500 hover:text-slate-900" data-testid="back-to-modules">← Modules</Link>
+                        <NotificationBell />
                         <UsersThree size={16} className="text-slate-400" />
                         <span className="text-xs text-slate-500 hidden sm:block">{user.email}</span>
                     </div>

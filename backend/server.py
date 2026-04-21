@@ -10,6 +10,7 @@ from routes_cases import router as cases_router
 from routes_forms import router as forms_router
 from routes_documents import router as documents_router
 from routes_ai import router as ai_router
+from routes_notifications import router as notifications_router
 from seed import seed_all
 
 logging.basicConfig(
@@ -38,6 +39,7 @@ api_router.include_router(cases_router)
 api_router.include_router(forms_router)
 api_router.include_router(documents_router)
 api_router.include_router(ai_router)
+api_router.include_router(notifications_router)
 
 app.include_router(api_router)
 

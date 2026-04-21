@@ -26,7 +26,7 @@ export default function Login() {
         setLoading(true);
         try {
             await login(email.trim().toLowerCase(), password);
-            nav("/app");
+            nav("/");
         } catch (err) {
             setError(err?.response?.data?.detail || "Login failed");
         } finally {
@@ -47,7 +47,7 @@ export default function Login() {
                         <div className="w-8 h-8 rounded bg-white text-slate-900 grid place-items-center">
                             <Target size={18} weight="bold" />
                         </div>
-                        <div className="font-semibold">LDC AI Platform</div>
+                        <div className="font-semibold">Transition Diagnostics</div>
                     </div>
                     <h1 className="text-4xl font-semibold tracking-tight leading-tight max-w-md">
                         Evidence-based leadership readiness, assisted by AI, decided by humans.
