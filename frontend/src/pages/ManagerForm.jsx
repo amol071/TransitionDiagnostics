@@ -3,7 +3,9 @@ import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import StatusBadge from "@/components/StatusBadge";
 import AIPanel from "@/components/AIPanel";
-import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator } from "@/components/AIHelpers";
+import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator, AI_LABELS } from "@/components/AIHelpers";
+import BiasCheckPanel from "@/components/BiasCheckPanel";
+import { humanDate } from "@/lib/utils-ldc";
 import { nextLevelFor, capsAtLevel, groupByPillarGcf } from "@/lib/gcf";
 import { Plus, Trash, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -25,6 +27,8 @@ export default function ManagerForm() {
     const [form, setForm] = useState(null);
     const [aiSuggestions, setAiSuggestions] = useState(null);
     const [directory, setDirectory] = useState([]);
+    const [analyses, setAnalyses] = useState({});
+    const [biasElig, setBiasElig] = useState(null);
 
     useEffect(() => {
         Promise.all([
@@ -32,8 +36,10 @@ export default function ManagerForm() {
             api.get(`/capabilities`).then(r => r.data),
             api.get(`/cases/${caseId}/manager-form`).then(r => r.data),
             api.get(`/employees`).then(r => r.data).catch(() => []),
-        ]).then(([cd, capd, fd, emp]) => {
-            setC(cd); setAllCaps(capd); setDirectory(emp || []);
+            api.get(`/ai/case/${caseId}/latest`).then(r => r.data).catch(() => ({})),
+            api.get(`/ai/case/${caseId}/bias-eligibility`).then(r => r.data).catch(() => null),
+        ]).then(([cd, capd, fd, emp, lat, elig]) => {
+            setC(cd); setAllCaps(capd); setDirectory(emp || []); setAnalyses(lat || {}); setBiasElig(elig);
             const nl = nextLevelFor(cd.employee?.level);
             const lc = capsAtLevel(capd, nl);
             const existing = new Map((fd.capability_responses || []).map(r => [r.capability_id, r]));
@@ -122,7 +128,15 @@ export default function ManagerForm() {
 
             <div className="ldc-panel p-4">
                 <div className="ldc-label mb-2">AI assistants</div>
-                <CaseAIBar caseId={c.id} types={["stakeholder_suggest", "integrated_summary"]} onResult={(t, a) => setAiSuggestions({ type: t, data: a })} />
+                <CaseAIBar
+                    caseId={c.id}
+                    types={["stakeholder_suggest", "integrated_summary", "bias_check"]}
+                    onResult={(t, a) => {
+                        setAnalyses((prev) => ({ ...prev, [t]: a }));
+                        if (t !== "bias_check") setAiSuggestions({ type: t, data: a });
+                    }}
+                    disabledTypes={biasElig && !biasElig.eligible ? { bias_check: biasElig.reason || "Not enough submitted sources" } : {}}
+                />
                 {aiSuggestions?.type === "stakeholder_suggest" && (
                     <AIPanel title="AI stakeholder suggestions" testid="ai-stk-suggest">
                         <ul className="list-disc pl-4 space-y-1">
@@ -133,6 +147,12 @@ export default function ManagerForm() {
                     </AIPanel>
                 )}
             </div>
+
+            {analyses.bias_check && (
+                <AIPanel title={AI_LABELS.bias_check} subtitle={humanDate(analyses.bias_check.created_at)} testid="ai-bias_check">
+                    <BiasCheckPanel data={analyses.bias_check.structured} eligibility={analyses.bias_check.structured?._eligibility} />
+                </AIPanel>
+            )}
 
             <div className="ldc-panel">
                 <div className="p-4 border-b border-slate-200"><div className="ldc-section-title">L{nextLvl} capability review ({levelCaps.length} competencies · Godrej Capability Framework)</div></div>

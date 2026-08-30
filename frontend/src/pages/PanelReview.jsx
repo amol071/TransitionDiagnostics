@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import StatusBadge from "@/components/StatusBadge";
 import AIPanel from "@/components/AIPanel";
 import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator, AI_LABELS } from "@/components/AIHelpers";
+import BiasCheckPanel from "@/components/BiasCheckPanel";
 import { humanDate, DOC_TYPE_LABELS } from "@/lib/utils-ldc";
 import { nextLevelFor, capsAtLevel, groupByPillarGcf } from "@/lib/gcf";
 import { CheckCircle, FolderOpen, Sparkle } from "@phosphor-icons/react";
@@ -35,9 +36,10 @@ export default function PanelReview() {
     const [form, setForm] = useState(null);
     const [analyses, setAnalyses] = useState({});
     const [docDrawer, setDocDrawer] = useState(false);
+    const [biasElig, setBiasElig] = useState(null);
 
     const reload = async () => {
-        const [cd, capd, ef, mf, stks, dd, pr, lat] = await Promise.all([
+        const [cd, capd, ef, mf, stks, dd, pr, lat, elig] = await Promise.all([
             api.get(`/cases/${caseId}`).then(r => r.data),
             api.get(`/capabilities`).then(r => r.data),
             api.get(`/cases/${caseId}/employee-form`).then(r => r.data),
@@ -46,8 +48,9 @@ export default function PanelReview() {
             api.get(`/cases/${caseId}/documents`).then(r => r.data),
             api.get(`/cases/${caseId}/panel-review/mine`).then(r => r.data),
             api.get(`/ai/case/${caseId}/latest`).then(r => r.data),
+            api.get(`/ai/case/${caseId}/bias-eligibility`).then(r => r.data).catch(() => null),
         ]);
-        setC(cd); setAllCaps(capd); setEmpForm(ef); setMgrForm(mf); setStkFbs(stks); setDocs(dd.documents);
+        setC(cd); setAllCaps(capd); setEmpForm(ef); setMgrForm(mf); setStkFbs(stks); setDocs(dd.documents); setBiasElig(elig);
         const nl = nextLevelFor(cd.employee?.level);
         const lc = capsAtLevel(capd, nl);
         const existing = new Map((pr.capability_ratings || []).map(r => [r.capability_id, r]));
@@ -161,12 +164,19 @@ export default function PanelReview() {
                     <div className="ldc-label">AI assistants</div>
                     <button onClick={applyPanelDraft} data-testid="apply-panel-draft" className="text-xs font-semibold px-3 py-1.5 rounded bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-1"><Sparkle size={12} weight="fill" /> Apply panel draft</button>
                 </div>
-                <CaseAIBar caseId={c.id} types={["panel_draft", "integrated_summary", "bias_check", "capability_gap"]} onResult={(t, a) => setAnalyses({ ...analyses, [t]: a })} />
+                <CaseAIBar
+                    caseId={c.id}
+                    types={["panel_draft", "integrated_summary", "bias_check", "capability_gap"]}
+                    onResult={(t, a) => setAnalyses({ ...analyses, [t]: a })}
+                    disabledTypes={biasElig && !biasElig.eligible ? { bias_check: biasElig.reason || "Not enough submitted sources" } : {}}
+                />
             </div>
 
             {["panel_draft", "integrated_summary", "bias_check", "capability_gap"].map(t => analyses[t] && (
                 <AIPanel key={t} title={AI_LABELS[t] || t} subtitle={humanDate(analyses[t].created_at)} testid={`ai-${t}`}>
-                    <AIRender type={t} data={analyses[t].structured} />
+                    {t === "bias_check"
+                        ? <BiasCheckPanel data={analyses[t].structured} eligibility={analyses[t].structured?._eligibility} />
+                        : <AIRender type={t} data={analyses[t].structured} />}
                 </AIPanel>
             ))}
 

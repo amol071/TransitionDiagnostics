@@ -34,7 +34,7 @@ export function AIWriteButton({ text, mode = "improve", context, onResult, label
 }
 
 /** Section for case-level AI analyses */
-export function CaseAIBar({ caseId, types = [], onResult }) {
+export function CaseAIBar({ caseId, types = [], onResult, disabledTypes = {} }) {
     const [loading, setLoading] = useState("");
     const run = async (t) => {
         setLoading(t);
@@ -43,32 +43,37 @@ export function CaseAIBar({ caseId, types = [], onResult }) {
             onResult?.(t, data);
             toast.success(`AI ${t.replace(/_/g, " ")} generated`);
         } catch (e) {
-            toast.error("AI error");
+            toast.error(e?.response?.data?.detail || "AI error");
         } finally {
             setLoading("");
         }
     };
     return (
         <div className="flex flex-wrap gap-2">
-            {types.map((t) => (
-                <button
-                    key={t}
-                    onClick={() => run(t)}
-                    data-testid={`ai-run-${t}`}
-                    disabled={loading === t}
-                    className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-                >
-                    <Sparkle size={12} weight="fill" />
-                    {loading === t ? "Analyzing…" : AI_LABELS[t] || t}
-                </button>
-            ))}
+            {types.map((t) => {
+                const disabledReason = disabledTypes[t];
+                const isDisabled = loading === t || !!disabledReason;
+                return (
+                    <button
+                        key={t}
+                        onClick={() => run(t)}
+                        data-testid={`ai-run-${t}`}
+                        disabled={isDisabled}
+                        title={disabledReason || ""}
+                        className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Sparkle size={12} weight="fill" />
+                        {loading === t ? "Analyzing…" : AI_LABELS[t] || t}
+                    </button>
+                );
+            })}
         </div>
     );
 }
 
 export const AI_LABELS = {
     integrated_summary: "Integrated summary",
-    bias_check: "Bias & discussion flags",
+    bias_check: "Bias & consistency check",
     capability_gap: "Capability gap",
     panel_draft: "Panel draft",
     hr_draft: "HR draft",

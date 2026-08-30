@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import StatusBadge from "@/components/StatusBadge";
 import AIPanel from "@/components/AIPanel";
 import { CaseAIBar, AI_LABELS } from "@/components/AIHelpers";
+import BiasCheckPanel from "@/components/BiasCheckPanel";
 import { humanDate, DOC_TYPE_LABELS } from "@/lib/utils-ldc";
 import {
     PencilSimple, Users, FolderOpen, ChartBar, ClipboardText,
@@ -19,15 +20,17 @@ export default function CaseDetail() {
     const [docs, setDocs] = useState([]);
     const [analyses, setAnalyses] = useState({});
     const [prior, setPrior] = useState(null);
+    const [biasElig, setBiasElig] = useState(null);
     const [loading, setLoading] = useState(true);
 
     const reload = async () => {
-        const [cd, dd, ai] = await Promise.all([
+        const [cd, dd, ai, elig] = await Promise.all([
             api.get(`/cases/${caseId}`).then(r => r.data),
             api.get(`/cases/${caseId}/documents`).then(r => r.data),
             api.get(`/ai/case/${caseId}/latest`).then(r => r.data),
+            api.get(`/ai/case/${caseId}/bias-eligibility`).then(r => r.data).catch(() => null),
         ]);
-        setC(cd); setDocs(dd.documents); setAnalyses(ai);
+        setC(cd); setDocs(dd.documents); setAnalyses(ai); setBiasElig(elig);
         if (cd.is_renomination) {
             try {
                 const { data } = await api.get(`/cases/${caseId}/prior`);
@@ -120,11 +123,18 @@ export default function CaseDetail() {
                 <div className="space-y-4">
                     <div className="ldc-panel p-4">
                         <div className="ldc-label mb-2">AI insights</div>
-                        <CaseAIBar caseId={c.id} types={aiTypes} onResult={(t, d) => setAnalyses({ ...analyses, [t]: d })} />
+                        <CaseAIBar
+                            caseId={c.id}
+                            types={aiTypes}
+                            onResult={(t, d) => setAnalyses({ ...analyses, [t]: d })}
+                            disabledTypes={biasElig && !biasElig.eligible ? { bias_check: biasElig.reason || "Not enough submitted sources" } : {}}
+                        />
                     </div>
                     {Object.entries(analyses).filter(([t]) => aiTypes.includes(t)).map(([t, a]) => (
                         <AIPanel key={t} title={AI_LABELS[t] || t} subtitle={humanDate(a.created_at)} testid={`ai-card-${t}`}>
-                            <AIContent structured={a.structured} />
+                            {t === "bias_check"
+                                ? <BiasCheckPanel data={a.structured} eligibility={a.structured?._eligibility} />
+                                : <AIContent structured={a.structured} />}
                         </AIPanel>
                     ))}
                 </div>

@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import StatusBadge from "@/components/StatusBadge";
-import { AIWriteButton, useAutoSave, SaveIndicator } from "@/components/AIHelpers";
+import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator, AI_LABELS } from "@/components/AIHelpers";
+import AIPanel from "@/components/AIPanel";
+import BiasCheckPanel from "@/components/BiasCheckPanel";
+import { humanDate } from "@/lib/utils-ldc";
 import { nextLevelFor, capsAtLevel, groupByPillarGcf } from "@/lib/gcf";
 import { CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -15,14 +18,18 @@ export default function StakeholderForm() {
     const [c, setC] = useState(null);
     const [allCaps, setAllCaps] = useState([]);
     const [form, setForm] = useState(null);
+    const [analyses, setAnalyses] = useState({});
+    const [biasElig, setBiasElig] = useState(null);
 
     useEffect(() => {
         Promise.all([
             api.get(`/cases/${caseId}`).then(r => r.data),
             api.get(`/capabilities`).then(r => r.data),
             api.get(`/cases/${caseId}/stakeholder-feedback/mine`).then(r => r.data),
-        ]).then(([cd, capd, fd]) => {
-            setC(cd); setAllCaps(capd);
+            api.get(`/ai/case/${caseId}/latest`).then(r => r.data).catch(() => ({})),
+            api.get(`/ai/case/${caseId}/bias-eligibility`).then(r => r.data).catch(() => null),
+        ]).then(([cd, capd, fd, lat, elig]) => {
+            setC(cd); setAllCaps(capd); setAnalyses(lat || {}); setBiasElig(elig);
             const nl = nextLevelFor(cd.employee?.level);
             const lc = capsAtLevel(capd, nl);
             const existing = new Map((fd.capability_responses || []).map(r => [r.capability_id, r]));
@@ -80,6 +87,23 @@ export default function StakeholderForm() {
                 <div className="ldc-label mt-1">{c.employee?.name} · {c.fiscal_year}</div>
                 <h1 className="text-2xl font-semibold tracking-tight mt-1">Stakeholder feedback</h1>
             </div>
+
+            <div className="ldc-panel p-4">
+                <div className="ldc-label mb-2">AI assistants</div>
+                <CaseAIBar
+                    caseId={c.id}
+                    types={["bias_check"]}
+                    onResult={(t, a) => setAnalyses((prev) => ({ ...prev, [t]: a }))}
+                    disabledTypes={biasElig && !biasElig.eligible ? { bias_check: biasElig.reason || "Not enough submitted sources" } : {}}
+                />
+                <div className="text-[11px] text-slate-500 mt-2">Bias check helps you sanity-check your ratings against Self / Manager / Panel already on file.</div>
+            </div>
+
+            {analyses.bias_check && (
+                <AIPanel title={AI_LABELS.bias_check} subtitle={humanDate(analyses.bias_check.created_at)} testid="ai-bias_check">
+                    <BiasCheckPanel data={analyses.bias_check.structured} eligibility={analyses.bias_check.structured?._eligibility} />
+                </AIPanel>
+            )}
 
             <div className="ldc-panel">
                 <div className="p-4 border-b border-slate-200"><div className="ldc-section-title">Capability-wise feedback · L{nextLvl} framework</div></div>

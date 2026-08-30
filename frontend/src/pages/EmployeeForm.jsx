@@ -4,7 +4,9 @@ import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import StatusBadge from "@/components/StatusBadge";
 import AIPanel from "@/components/AIPanel";
-import { AIWriteButton, useAutoSave, SaveIndicator } from "@/components/AIHelpers";
+import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator, AI_LABELS } from "@/components/AIHelpers";
+import BiasCheckPanel from "@/components/BiasCheckPanel";
+import { humanDate } from "@/lib/utils-ldc";
 import { nextLevelFor, currentLevelNumber, capsAtLevel, groupByPillarGcf, findSibling, coreCaps, OTHER_GCFS } from "@/lib/gcf";
 import { Plus, Trash, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -18,14 +20,18 @@ export default function EmployeeForm() {
     const [c, setC] = useState(null);
     const [allCaps, setAllCaps] = useState([]);
     const [form, setForm] = useState(null);
+    const [analyses, setAnalyses] = useState({});
+    const [biasElig, setBiasElig] = useState(null);
 
     useEffect(() => {
         Promise.all([
             api.get(`/cases/${caseId}`).then(r => r.data),
             api.get(`/capabilities`).then(r => r.data),
             api.get(`/cases/${caseId}/employee-form`).then(r => r.data),
-        ]).then(([cd, capd, fd]) => {
-            setC(cd); setAllCaps(capd);
+            api.get(`/ai/case/${caseId}/latest`).then(r => r.data).catch(() => ({})),
+            api.get(`/ai/case/${caseId}/bias-eligibility`).then(r => r.data).catch(() => null),
+        ]).then(([cd, capd, fd, lat, elig]) => {
+            setC(cd); setAllCaps(capd); setAnalyses(lat || {}); setBiasElig(elig);
             const nl = nextLevelFor(cd.employee?.level);
             const levelCaps = coreCaps(capsAtLevel(capd, nl));
             const existing = new Map((fd.capability_responses || []).map(r => [r.capability_id, r]));
@@ -123,6 +129,24 @@ export default function EmployeeForm() {
     return (
         <div className="space-y-5 animate-fade-in" data-testid="emp-form-page">
             <Header c={c} title="Employee self-reflection" saving={saving} savedAt={savedAt} dirty={dirty} readonly={readonly} />
+
+            {!readonly && (
+                <div className="ldc-panel p-4">
+                    <div className="ldc-label mb-2">AI assistants</div>
+                    <CaseAIBar
+                        caseId={c.id}
+                        types={["bias_check"]}
+                        onResult={(t, a) => setAnalyses((prev) => ({ ...prev, [t]: a }))}
+                        disabledTypes={biasElig && !biasElig.eligible ? { bias_check: biasElig.reason || "Not enough submitted sources" } : {}}
+                    />
+                    <div className="text-[11px] text-slate-500 mt-2">Bias check compares your self-reflection to any Manager / Stakeholder / Panel input already on file, so you can catch inconsistencies before submitting.</div>
+                </div>
+            )}
+            {analyses.bias_check && (
+                <AIPanel title={AI_LABELS.bias_check} subtitle={humanDate(analyses.bias_check.created_at)} testid="ai-bias_check">
+                    <BiasCheckPanel data={analyses.bias_check.structured} eligibility={analyses.bias_check.structured?._eligibility} />
+                </AIPanel>
+            )}
 
             <Section title="Key contributions" subtitle="2–5 initiatives that best demonstrate your readiness">
                 <div className="space-y-3">

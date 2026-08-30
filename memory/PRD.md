@@ -17,6 +17,26 @@ Production-ready internal enterprise web application for a Leadership Developmen
 - **HR / HRBP** (hr.lead@ldc.io) — final summary report with AI drafts.
 - **Stakeholder** (stake.one@ldc.io) — capability-wise feedback.
 
+## What's Implemented (2026-08-30 v6) · Deep AI Bias & Consistency Checker
+
+- **Enriched `ai_bias_check` prompt/schema** (`/app/backend/ai_service.py`) now returns:
+  - `overall_risk` (Low/Medium/High) + `consistency_score` 0–100 + `score_breakdown` (rating alignment · evidence alignment · source coverage · language neutrality)
+  - `rating_mismatches` — per-capability grid across Self · Manager · Stakeholder · Panel with Δ severity chip and notes
+  - `rater_patterns` — Halo / Leniency / Severity / Central-tendency / Balanced flagged per source with evidence and per-source risk
+  - `evidence_alignment` — unsupported_high / unsupported_low / missing_rationale / contradictory_rationale per capability × source
+  - `language_signals` — superlative_without_evidence · personality_over_behavior · potentially_gendered_or_biased_wording · absolute_language, with verbatim quote + explanation
+  - `missing_coverage` with impact level, `discussion_flags` with `suggested_probe`, `recommendations` list
+  - LLM receives an explicit per-capability RATING COMPARISON grid built via new `build_rating_comparison()` helper for tighter grounding.
+- **Eligibility gate**: `GET /api/ai/case/{id}/bias-eligibility` returns `{eligible, submitted_sources, reason}`. `POST /api/ai/analyze` for `bias_check` returns **400** when < 2 sources have submitted, so the LLM is never asked to synthesize on empty inputs.
+- **Bias check now exposed across ALL role forms** (was Panel + HR only):
+  - **EmployeeForm** — new AI assistants bar with Bias check button, gated by eligibility, with helper copy.
+  - **ManagerForm** — bias_check added to CaseAIBar; AIPanel renders below.
+  - **StakeholderForm** — new AI assistants bar with Bias check button.
+  - **PanelReview**, **HRSummary**, **CaseDetail** — button now disabled with tooltip when not eligible.
+- **New `<BiasCheckPanel>` component** (`/app/frontend/src/components/BiasCheckPanel.jsx`): color-coded risk chip, score bar, 4-facet breakdown, mismatches table, rater-pattern grid, evidence alignment, language signals, missing coverage, panel probes (with suggested question) and recommendations. Falls back gracefully to legacy schema.
+- **`CaseAIBar` API extended** with a `disabledTypes` map so callers can gate individual buttons with tooltips.
+- **Verified end-to-end**: backend returns 400 on ineligible cases and rich structured output when eligible; Playwright confirms the panel renders with score bar, mismatches, rater patterns, evidence alignment and language signals sections.
+
 ## What's Implemented (2026-08-30 v5) · Wireframes documentation page
 
 - **New public route `/wireframes`** — single-page, low-fidelity wireframe deliverable for stakeholder review.

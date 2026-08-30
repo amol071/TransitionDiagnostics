@@ -127,22 +127,113 @@ Return ONLY valid JSON (no markdown fences) with keys:
     return _parse_json(raw)
 
 
-async def ai_bias_check(context: str) -> Dict[str, Any]:
-    prompt = f"""Examine the assessment below for bias, inconsistency, and discussion flags.
+async def ai_bias_check(context: str, comparison_table: str = "") -> Dict[str, Any]:
+    prompt = f"""You are auditing a multi-source leadership assessment for BIAS and CONSISTENCY.
+Assess data from Self / Manager / Stakeholder(s) / Panel / (Prior cycle if renomination).
+Base every conclusion strictly on the evidence provided. If a source hasn't submitted, note it in `missing_coverage` — do not invent input.
 
+FULL CONTEXT:
 {context}
 
-Return ONLY JSON:
+STRUCTURED RATING COMPARISON (may be empty if data is thin):
+{comparison_table or "(no numeric ratings extracted)"}
+
+Return ONLY valid JSON (no markdown fences):
 {{
-  "discussion_flags": [{{"topic": "...", "sources": ["self","manager","panel"], "explanation": "..."}}],
-  "bias_risks": [{{"risk": "High|Medium|Low", "reason": "..."}}],
-  "unsupported_high": ["capability where evidence is weak but rating is high"],
-  "unsupported_low": ["capability where evidence is strong but rating is low"],
-  "missing_evidence": ["areas where evidence is missing"],
-  "summary": "2-3 sentences"
+  "overall_risk": "Low|Medium|High",
+  "consistency_score": 0-100,
+  "score_breakdown": {{
+    "rating_alignment": 0-100,
+    "evidence_alignment": 0-100,
+    "source_coverage": 0-100,
+    "language_neutrality": 0-100
+  }},
+  "summary": "3-4 sentence narrative of the biggest bias/consistency concerns and where the panel/HR should probe.",
+  "rating_mismatches": [
+    {{
+      "capability": "capability name",
+      "self": "Below|Meets|Exceeds|—",
+      "manager": "Below|Meets|Exceeds|—",
+      "stakeholder": "Below|Meets|Exceeds|Mixed|—",
+      "panel": "Strong|Moderate|Weak|Mixed|—",
+      "delta": "Aligned|Minor|Major",
+      "notes": "1 sentence why this matters"
+    }}
+  ],
+  "rater_patterns": [
+    {{
+      "source": "self|manager|stakeholder:<name>|panel:<member>",
+      "pattern": "Halo|Leniency|Severity|Central-tendency|Balanced",
+      "evidence": "1-2 sentences citing which ratings triggered this",
+      "risk": "Low|Medium|High"
+    }}
+  ],
+  "evidence_alignment": [
+    {{
+      "capability": "capability name",
+      "issue": "unsupported_high|unsupported_low|missing_rationale|contradictory_rationale",
+      "source": "self|manager|stakeholder|panel",
+      "explanation": "1 sentence"
+    }}
+  ],
+  "language_signals": [
+    {{
+      "source": "self|manager|stakeholder|panel",
+      "signal": "superlative_without_evidence|personality_over_behavior|potentially_gendered_or_biased_wording|absolute_language",
+      "quote": "verbatim phrase or paraphrase",
+      "explanation": "why this is a bias signal"
+    }}
+  ],
+  "missing_coverage": [
+    {{"item": "e.g. 'No stakeholder feedback on Influencing'", "impact": "Low|Medium|High"}}
+  ],
+  "discussion_flags": [
+    {{
+      "topic": "short label",
+      "sources_disagree": ["self","manager","stakeholder","panel"],
+      "sources_agree": ["..."],
+      "explanation": "1-2 sentences",
+      "suggested_probe": "specific question the panel/HR should ask to resolve this"
+    }}
+  ],
+  "recommendations": ["3-5 concrete next steps the panel/HR/reviewer should take"]
 }}"""
     raw = await _run(f"bias-{uuid.uuid4()}", prompt)
     return _parse_json(raw)
+
+
+def build_rating_comparison(cap_by_id: dict, emp_form: Optional[dict], mgr_form: Optional[dict],
+                            stakeholder_feedbacks: list, panel_reviews: list) -> str:
+    """Compact per-capability rating grid, one row per capability. Used by ai_bias_check."""
+    def cap_name(cid):
+        return cap_by_id.get(cid, {}).get("name", cid)
+
+    def by_cap(items, key="capability_id"):
+        return {r.get(key): r for r in (items or [])}
+
+    self_map = by_cap((emp_form or {}).get("capability_responses"))
+    mgr_map = by_cap((mgr_form or {}).get("capability_responses"))
+    stk_maps = [by_cap(s.get("capability_responses")) for s in stakeholder_feedbacks or []]
+    panel_maps = [by_cap(p.get("capability_ratings"), "capability_id") for p in panel_reviews or []]
+
+    cap_ids = set(self_map) | set(mgr_map)
+    for m in stk_maps:
+        cap_ids |= set(m)
+    for m in panel_maps:
+        cap_ids |= set(m)
+    if not cap_ids:
+        return ""
+
+    lines = ["CAPABILITY | SELF | MANAGER | STAKEHOLDER(S) | PANEL"]
+    for cid in cap_ids:
+        s = (self_map.get(cid) or {}).get("current_level") or "—"
+        m = (mgr_map.get(cid) or {}).get("current_level") or "—"
+        stks = [str(sm.get(cid, {}).get("current_level") or "—") for sm in stk_maps]
+        stk = "/".join(stks) if stks else "—"
+        panels = [str(pm.get(cid, {}).get("rating") or "—") for pm in panel_maps]
+        pnl = "/".join(panels) if panels else "—"
+        lines.append(f"{cap_name(cid)} | {s} | {m} | {stk} | {pnl}")
+    return "\n".join(lines)
 
 
 async def ai_capability_gap(context: str) -> Dict[str, Any]:

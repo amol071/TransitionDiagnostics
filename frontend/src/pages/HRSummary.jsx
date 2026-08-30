@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import StatusBadge from "@/components/StatusBadge";
 import AIPanel from "@/components/AIPanel";
 import { AIWriteButton, CaseAIBar, useAutoSave, SaveIndicator, AI_LABELS } from "@/components/AIHelpers";
+import BiasCheckPanel from "@/components/BiasCheckPanel";
 import { humanDate } from "@/lib/utils-ldc";
 import { CheckCircle, Sparkle, Plus, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -18,14 +19,16 @@ export default function HRSummary() {
     const [analyses, setAnalyses] = useState({});
     const [panelReviews, setPanelReviews] = useState([]);
     const [mgrForm, setMgrForm] = useState(null);
+    const [biasElig, setBiasElig] = useState(null);
 
     const reload = async () => {
-        const [cd, hr, pr, mgr, lat] = await Promise.all([
+        const [cd, hr, pr, mgr, lat, elig] = await Promise.all([
             api.get(`/cases/${caseId}`).then(r => r.data),
             api.get(`/cases/${caseId}/hr-review`).then(r => r.data),
             api.get(`/cases/${caseId}/panel-reviews`).then(r => r.data),
             api.get(`/cases/${caseId}/manager-form`).then(r => r.data),
             api.get(`/ai/case/${caseId}/latest`).then(r => r.data),
+            api.get(`/ai/case/${caseId}/bias-eligibility`).then(r => r.data).catch(() => null),
         ]);
         setC(cd);
         if (!hr.strengths || hr.strengths.length === 0) hr.strengths = [""];
@@ -34,6 +37,7 @@ export default function HRSummary() {
         setPanelReviews(pr);
         setMgrForm(mgr);
         setAnalyses(lat);
+        setBiasElig(elig);
     };
     useEffect(() => { reload(); }, [caseId]);
 
@@ -111,12 +115,19 @@ export default function HRSummary() {
                     <div className="ldc-label">AI drafts</div>
                     <button onClick={applyHRDraft} data-testid="apply-hr-draft" className="text-xs font-semibold px-3 py-1.5 rounded bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-1"><Sparkle size={12} weight="fill" /> Apply HR draft</button>
                 </div>
-                <CaseAIBar caseId={c.id} types={["hr_draft", "development_plan", "integrated_summary", "bias_check"]} onResult={(t, a) => setAnalyses({ ...analyses, [t]: a })} />
+                <CaseAIBar
+                    caseId={c.id}
+                    types={["hr_draft", "development_plan", "integrated_summary", "bias_check"]}
+                    onResult={(t, a) => setAnalyses({ ...analyses, [t]: a })}
+                    disabledTypes={biasElig && !biasElig.eligible ? { bias_check: biasElig.reason || "Not enough submitted sources" } : {}}
+                />
             </div>
 
             {["hr_draft", "integrated_summary", "bias_check", "development_plan"].map(t => analyses[t] && (
                 <AIPanel key={t} title={AI_LABELS[t] || t} subtitle={humanDate(analyses[t].created_at)} testid={`ai-${t}`}>
-                    <HRAIView t={t} data={analyses[t].structured} />
+                    {t === "bias_check"
+                        ? <BiasCheckPanel data={analyses[t].structured} eligibility={analyses[t].structured?._eligibility} />
+                        : <HRAIView t={t} data={analyses[t].structured} />}
                 </AIPanel>
             ))}
 
