@@ -19,6 +19,7 @@ import Uploads from "@/pages/Uploads";
 import Status from "@/pages/Status";
 import Audit from "@/pages/Audit";
 import AdminCenter from "@/pages/AdminCenter";
+import Wireframes from "@/pages/Wireframes";
 
 function Protected({ children }) {
     const { user } = useAuth();
@@ -34,6 +35,7 @@ function App() {
                 <Routes>
                     <Route path="/" element={<Protected><Landing /></Protected>} />
                     <Route path="/login" element={<Login />} />
+                    <Route path="/wireframes" element={<Wireframes />} />
                     <Route path="/admin" element={<Protected><AdminCenter /></Protected>} />
                     <Route path="/app" element={<Protected><AppLayout /></Protected>}>
                         <Route index element={<Dashboard />} />

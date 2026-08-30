@@ -17,6 +17,16 @@ Production-ready internal enterprise web application for a Leadership Developmen
 - **HR / HRBP** (hr.lead@ldc.io) — final summary report with AI drafts.
 - **Stakeholder** (stake.one@ldc.io) — capability-wise feedback.
 
+## What's Implemented (2026-08-30 v5) · Wireframes documentation page
+
+- **New public route `/wireframes`** — single-page, low-fidelity wireframe deliverable for stakeholder review.
+- 16 screen wireframes covering the entire app: Landing · Login · Dashboard · Nominees list · Add nominee dialog · Add employee dialog · Case detail · Employee self-reflection (with 7 core GCFs + optional 5) · Manager review · Stakeholder feedback · Panel review · Prior-cycle dossier · HR summary · Uploads centre · Status dashboard · Notifications drawer · Admin Center.
+- Plus a case-lifecycle flow diagram (Nominate → Employee → Manager → Stakeholder → Panel → HR → Closed) and a legend explaining wireframe conventions.
+- Grayscale-only (dashed = placeholders, solid = structural elements), desktop-canvas (~1200px), backward-looking (documents the app as it stands today).
+- Sticky left-hand index with anchor links; every card is `.break-inside-avoid` and print CSS hides chrome so browser Print → clean PDF.
+- Publicly reachable (no auth), so it can be shared with external reviewers without login friction.
+- File: `/app/frontend/src/pages/Wireframes.jsx` (self-contained, ~570 lines).
+
 ## What's Implemented (2026-04-21 v4) · Self-reflection Focus + Clear Form
 
 - **Employee self-reflection now shows only 7 core GCFs** (hardcoded in `/app/frontend/src/lib/gcf.js → CORE_GCF_KEYS`):
