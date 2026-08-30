@@ -20,6 +20,7 @@ import Status from "@/pages/Status";
 import Audit from "@/pages/Audit";
 import AdminCenter from "@/pages/AdminCenter";
 import Wireframes from "@/pages/Wireframes";
+import Showcase from "@/pages/Showcase";
 
 function Protected({ children }) {
     const { user } = useAuth();
@@ -36,6 +37,7 @@ function App() {
                     <Route path="/" element={<Protected><Landing /></Protected>} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/wireframes" element={<Wireframes />} />
+                    <Route path="/showcase" element={<Showcase />} />
                     <Route path="/admin" element={<Protected><AdminCenter /></Protected>} />
                     <Route path="/app" element={<Protected><AppLayout /></Protected>}>
                         <Route index element={<Dashboard />} />

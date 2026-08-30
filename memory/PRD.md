@@ -17,6 +17,22 @@ Production-ready internal enterprise web application for a Leadership Developmen
 - **HR / HRBP** (hr.lead@ldc.io) — final summary report with AI drafts.
 - **Stakeholder** (stake.one@ldc.io) — capability-wise feedback.
 
+## What's Implemented (2026-08-30 v7) · Stakeholder Showcase Deck
+
+- **New public route `/showcase`** — a stakeholder-facing feature deck with 25 real screenshots captured from the live app, plus 6 in-page diagrams.
+- **Screenshot pipeline** (`/app/scripts/capture_showcase.py`) — one Python + Playwright script that logs in as every persona (admin / employee / manager / stakeholder / panel / HR), navigates every screen, scrolls to key sections, and writes JPEGs to `/app/frontend/public/showcase/` (served as `/showcase/*.jpg`). Total ~2.7 MB.
+- **In-page diagrams (HTML/CSS, print-friendly)**:
+  - Intro card with 4 stat blocks (roles / screens / AI analyses / framework)
+  - System architecture — 3-layer boxes (Frontend · Backend · Data & AI) + request flow
+  - Case lifecycle — horizontal chain of 7 stages with role + AI touchpoints per stage
+  - Role × feature matrix — 12 rows × 7 roles (•/read/reopen/—)
+  - AI capability map — 10 AI analyses with location + description; bias check tagged as Featured
+  - Data model overview — 14 entities with key attributes; Case + AIAnalysis highlighted
+  - Godrej Capability Framework hierarchy — 3 pillars × 12 GCFs, 7 core GCFs marked
+- **25 captured screens**: login · landing · dashboard · nominees · add-nominee + add-employee dialogs · status · admin center · master data · uploads · case detail · employee form (top + core GCFs + optional GCFs) · manager form + directory picker · panel review + consolidated matrix · **bias & consistency check (4 panels — header · mismatches+rater patterns · language signals · panel probes)** · HR summary (top + strengths) · wireframes.
+- **Print CSS** hides top bar + side index, prevents card breaks — one-click PDF export via browser Print dialog. Sticky top bar with `Wireframes →` cross-link and prominent Print button.
+- **Verified** — page loads, all 25 `<img>` tags load OK (Playwright confirms `naturalWidth > 0`), diagrams render cleanly.
+
 ## What's Implemented (2026-08-30 v6) · Deep AI Bias & Consistency Checker
 
 - **Enriched `ai_bias_check` prompt/schema** (`/app/backend/ai_service.py`) now returns:
